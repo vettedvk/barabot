@@ -115,6 +115,15 @@ class ScheduleCog(commands.Cog):
 
     @tasks.loop(minutes=10)
     async def wipe_check(self):
+        # Never let an exception escape: an unhandled error here stops the loop
+        # for good (so the Monday wipe would silently never run again). A Notion
+        # outage or a not-yet-shared DB should just be retried next tick.
+        try:
+            await self._wipe_check_once()
+        except Exception as exc:
+            log.warning("wipe_check skipped this tick: %s", exc)
+
+    async def _wipe_check_once(self):
         if not _configured():
             return
         state = load_state(await ns.get_schedule_row())
