@@ -73,6 +73,15 @@ def is_event_logger(member: discord.Member) -> bool:
     return is_admin(member) or has_any_role(member, config.LOGGER_ROLE_IDS)
 
 
+def is_loa_reviewer(member: discord.Member) -> bool:
+    """
+    Who may approve/deny LOA requests: Bot Admins, Military Command officers, and
+    the Court. is_officer and is_event_logger each already layer ADMIN on, so
+    their union covers all three tiers.
+    """
+    return is_officer(member) or is_event_logger(member)
+
+
 # ── 2. Review-embed parsing ───────────────────────────────────────────────────
 # Review messages double as the bot's persistent state. When a button is
 # clicked we rebuild context from the embed instead of from memory.

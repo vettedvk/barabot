@@ -20,6 +20,7 @@ MEMBER_COMMANDS = [
     ("Enlistment panel", "Use **Begin Enlistment** (pick your region → retinue) or **Envoy Application** on the enlistment panel to apply (officer-reviewed)."),
     ("Region panel", "Press **Set My Region** to be auto-sorted into your retinue (EU & Middle East → Black Stags, NA → Thunderhooves, Asia → your choice)."),
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
+    ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),
     ("/help", "Show this command list."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
@@ -35,11 +36,13 @@ OFFICER_COMMANDS = [
     ("/add_roster_entry [member] [detachment] [rank] …", "Add a Notion roster entry only (no Discord roles). Copies Roblox/lore from the member's existing entry."),
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
     ("/sync", "Reconcile manual Discord role changes into Notion (transfers detachments, updates ranks, logs abandoned posts)."),
+    ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
 ]
 
 # Logging tier — the Court.
 LOGGER_COMMANDS = [
     ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees and everyone gets points/attendance (and promotions) in Notion."),
+    ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
 ]
 
 # Full-admin tier — every non-destructive command.
@@ -55,8 +58,9 @@ ADMIN_COMMANDS = [
     ("/self_update", "Post the 'Update Roblox Info' self-service panel (members fill in their own Roblox ID/username; auto-saved, no review)."),
     ("/setup_enlist_panel", "Post the enlistment / diplomatic entry panel in its channel."),
     ("/setup_discharge_panel", "Post the persistent Discharge Request panel in its channel."),
+    ("/setup_loa_panel", "Post the persistent LOA (Leave of Absence) request panel in its channel."),
     ("/missingnotionrole", "List military members who are not in the Notion roster."),
-    ("Accept / Decline buttons", "Approve or deny enlistment and discharge requests."),
+    ("Accept / Decline buttons", "Approve or deny enlistment, discharge, and LOA requests."),
 ]
 
 # Ruler tier — Heir / Lady / Lord of Storm's End only. Destructive/irreversible.

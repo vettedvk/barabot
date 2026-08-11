@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 import config
 from views.discharge_review import DischargeReviewView
 from views.discharge_panel import DischargePanelView
+from views.loa_review import LOAReviewView
+from views.loa_panel import LOAPanelView
 from views.self_update_panel import SelfUpdatePanelView
 from views.enlistment_panel import EnlistmentPanelView
 from views.enlistment_review import EnlistmentReviewView, EnvoyReviewView
@@ -82,6 +84,8 @@ class BaratheonBot(commands.Bot):
         self.add_view(EnvoyReviewView())
         self.add_view(DischargeReviewView())
         self.add_view(DischargePanelView())
+        self.add_view(LOAReviewView())
+        self.add_view(LOAPanelView())
         self.add_view(SelfUpdatePanelView())
         self.add_view(RegionPanelView())
         for trial_key in TRIALS:  # one persistent button per trial
@@ -94,6 +98,7 @@ class BaratheonBot(commands.Bot):
             "cogs.admin",
             "cogs.tidepoints",
             "cogs.discharge",
+            "cogs.loa",
             "cogs.audit",
             "cogs.sync_worker",
             "cogs.help",
