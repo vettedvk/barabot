@@ -56,6 +56,11 @@ CHANNEL_DISCHARGE_REVIEW = 1512498089653436426
 # Channel where the persistent "Request Discharge" button panel is posted.
 CHANNEL_DISCHARGE_PANEL  = 1512684353828683786
 
+# LOA (Leave of Absence) — mirrors discharge: members press a button in the
+# request channel, the review embed posts to the approval channel.
+CHANNEL_LOA_PANEL  = 1536688129220681830  # where the "Request LOA" button panel lives
+CHANNEL_LOA_REVIEW = 1536688227589685320  # where LOA requests post for approval
+
 # Enlistment / Diplomatic application panel + review
 CHANNEL_ENLISTMENT_PANEL  = 1499769147033260184   # where the buttons message lives
 CHANNEL_ENLISTMENT_REVIEW = 1499769319855231062   # where applications post for review
@@ -66,6 +71,7 @@ ROLE_VERIFIED        = 1488659967924895929  # granted on ANY approved applicatio
 ROLE_UNVERIFIED      = 1488659967924895928  # granted when a member joins; removed on enlistment
 ROLE_VISITOR         = 1488659967924895932  # granted on discharge (civilian standing)
 ROLE_HOUSE_BARATHEON = 1488659967979290797  # house membership; granted on military enlistment
+ROLE_LOA             = 1536689146083672174  # granted on approved LOA; removed when they return
 
 # Court of Storm's End membership role — AUTO-granted by role hygiene to
 # anyone holding a court station (Clerk/Emissary/Secretary), removed when the
@@ -253,6 +259,11 @@ OFFICER_ROLE_IDS = set(MILITARY_COMMAND_ROLE_IDS)
 
 # Logger tier: the Court role. ADMIN is added by util.is_event_logger.
 LOGGER_ROLE_IDS = {ROLE_COURT}
+
+# LOA reviewers: Bot Admins + Officers (Military Command) + the Court. Composed
+# from the tiers above by util.is_loa_reviewer, so it needs no separate set.
+# Roster Status value written to a member's rows while they are on leave.
+LOA_STATUS = "LOA"
 
 # ── Separator (divider) roles ──────────────────────────────────────────────
 # Role hygiene grants each member exactly the separators for the sections they

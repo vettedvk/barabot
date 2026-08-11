@@ -287,6 +287,16 @@ async def discharge_member(page_id: str) -> None:
     await archive_member(page_id, "Discharged")
 
 
+async def set_member_status(page_id: str, status: str) -> None:
+    """
+    Set a roster row's Status select WITHOUT archiving the page. Used for LOA
+    (member goes on leave, then back to Active) — unlike archive_member, which
+    is for permanent Discharged/Abandoned exits.
+    """
+    nc = get_client()
+    await nc.pages.update(page_id=page_id, properties={"Status": _select(status)})
+
+
 async def reactivate_member(
     page_id: str,
     new_discord_username: str,
@@ -483,6 +493,43 @@ async def create_discharge_log_entry(
 
 
 async def update_discharge_log_status(page_id: str, status: str, decided_by: str = "") -> None:
+    nc = get_client()
+    props = {"Status": _select(status)}
+    if decided_by:
+        props["Decided By"] = _text(decided_by)
+    await nc.pages.update(page_id=page_id, properties=props)
+
+
+# ── LOA (Leave of Absence) Log helpers ─────────────────────────────────────
+# Best-effort: if NOTION_LOA_LOG_DB_ID isn't configured yet, create returns None
+# and the LOA flow simply runs without a Notion paper trail (the review embed is
+# still the source of truth for the Approve/Deny buttons).
+
+async def create_loa_log_entry(
+    discord_user_id: str,
+    reason: str,
+    duration: str = "",
+    return_note: str = "",
+    status: str = "Pending",
+) -> Optional[dict]:
+    db_id = os.environ.get("NOTION_LOA_LOG_DB_ID")
+    if not db_id:
+        return None
+    nc = get_client()
+    return await nc.pages.create(
+        parent={"database_id": db_id},
+        properties={
+            "Member":    _title(discord_user_id),
+            "Reason":    _text(reason),
+            "Duration":  _text(duration),
+            "Return":    _text(return_note),
+            "Status":    _select(status),
+            "Timestamp": _date(datetime.now(timezone.utc)),
+        },
+    )
+
+
+async def update_loa_log_status(page_id: str, status: str, decided_by: str = "") -> None:
     nc = get_client()
     props = {"Status": _select(status)}
     if decided_by:
