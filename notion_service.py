@@ -537,6 +537,43 @@ async def update_loa_log_status(page_id: str, status: str, decided_by: str = "")
     await nc.pages.update(page_id=page_id, properties=props)
 
 
+# ── Weekly Schedule helpers ────────────────────────────────────────────────
+# A single "current schedule" row stores the whole week as one JSON blob in a
+# "Data" rich-text column. Setup is minimal: one database with its default title
+# column + a text column named "Data". Best-effort — no DB id means no schedule.
+
+async def get_schedule_row() -> Optional[dict]:
+    """Return the singleton schedule row (or None if unset/empty)."""
+    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
+    if not db_id:
+        return None
+    rows = await _query_all(db_id)
+    return rows[0] if rows else None
+
+
+async def save_schedule_data(data_json: str) -> Optional[dict]:
+    """Upsert the singleton schedule row's Data blob (creates the row if absent)."""
+    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
+    if not db_id:
+        return None
+    nc = get_client()
+    row = await get_schedule_row()
+    if row:
+        await nc.pages.update(page_id=row["id"], properties={"Data": _text(data_json)})
+        return row
+    # First run: create the row. Detect the title property so we don't have to
+    # assume it's called "Name".
+    db = await nc.databases.retrieve(database_id=db_id)
+    title_name = next(
+        (n for n, p in db.get("properties", {}).items() if p.get("type") == "title"),
+        "Name",
+    )
+    return await nc.pages.create(
+        parent={"database_id": db_id},
+        properties={title_name: _title("Weekly Schedule"), "Data": _text(data_json)},
+    )
+
+
 # ── House Relations helpers ────────────────────────────────────────────────
 
 async def get_all_relations() -> list[dict]:

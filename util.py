@@ -82,6 +82,14 @@ def is_loa_reviewer(member: discord.Member) -> bool:
     return is_officer(member) or is_event_logger(member)
 
 
+def is_schedule_manager(member: discord.Member) -> bool:
+    """
+    Who may build/edit/post the weekly training schedule: Bot Admins, Military
+    Command officers, and the Court — same tier as LOA review.
+    """
+    return is_officer(member) or is_event_logger(member)
+
+
 # ── 2. Review-embed parsing ───────────────────────────────────────────────────
 # Review messages double as the bot's persistent state. When a button is
 # clicked we rebuild context from the embed instead of from memory.

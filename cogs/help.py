@@ -37,12 +37,18 @@ OFFICER_COMMANDS = [
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
     ("/sync", "Reconcile manual Discord role changes into Notion (transfers detachments, updates ranks, logs abandoned posts)."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
+    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
+    ("/edit_schedule", "Edit the current week's training schedule."),
+    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Logging tier — the Court.
 LOGGER_COMMANDS = [
     ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees and everyone gets points/attendance (and promotions) in Notion."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
+    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
+    ("/edit_schedule", "Edit the current week's training schedule."),
+    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Full-admin tier — every non-destructive command.

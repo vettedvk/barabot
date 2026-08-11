@@ -99,6 +99,7 @@ class BaratheonBot(commands.Bot):
             "cogs.tidepoints",
             "cogs.discharge",
             "cogs.loa",
+            "cogs.schedule",
             "cogs.audit",
             "cogs.sync_worker",
             "cogs.help",
