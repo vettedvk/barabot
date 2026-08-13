@@ -106,12 +106,62 @@ async def apply_rank_and_company(
     if lorename is not None:
         await set_nickname(member, new_rank, lorename)
 
+    # Congratulate the member if this was a climb up the auto ladder. Best-effort
+    # and gated to real increases, so company moves / demotions stay quiet.
+    await announce_promotion(member, new_rank, old_rank)
+
     # Report what actually changed so automated callers (the sync worker) can
     # log meaningful actions and skip no-op reconciliations.
     return {
         "added":   [r.name for r in to_add],
         "removed": [r.name for r in to_remove],
     }
+
+
+async def announce_promotion(
+    member: discord.Member,
+    new_rank: str,
+    old_rank: str | None,
+) -> None:
+    """
+    Post a congratulations ping in the promotions channel when a member moves UP
+    the auto ladder (Levy → Soldier → Footman → Veteran Footman → Man-at-Arms).
+
+    Only the default ladder ranks are celebrated — stations, Court, specialised
+    and High Command ranks are appointments handled elsewhere. Best-effort: it
+    only fires on a genuine ladder increase and never raises into the caller, so
+    it's safe to call from every rank-change path (bot auto-promotions, the
+    manual commands, and the sync worker reconciling a hand-edited Discord role).
+    """
+    ladder = config.FLEET_RANKS
+    if new_rank not in ladder or old_rank not in ladder:
+        return
+    if ladder.index(new_rank) <= ladder.index(old_rank):
+        return  # lateral move, demotion, or no change — nothing to celebrate
+
+    channel_id = getattr(config, "CHANNEL_PROMOTIONS", 0)
+    if not channel_id:
+        return
+    channel = member.guild.get_channel(channel_id)
+    if channel is None:
+        return
+
+    embed = discord.Embed(
+        title="⚔️ Promotion — Ours is the Fury!",
+        description=(
+            f"Congratulations {member.mention}, you have been promoted to "
+            f"**{new_rank}**! Your service to House Baratheon is recognised."
+        ),
+        color=discord.Color.gold(),
+    )
+    try:
+        await channel.send(
+            content=f"🎉 {member.mention}",
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
+    except discord.HTTPException:
+        pass
 
 
 async def remove_all_rank_and_company_roles(member: discord.Member) -> None:

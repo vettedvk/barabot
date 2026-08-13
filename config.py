@@ -65,6 +65,10 @@ CHANNEL_LOA_REVIEW = 1536688227589685320  # where LOA requests post for approval
 # up to date in place. Wipes to a placeholder every Monday 00:00 UK time.
 CHANNEL_SCHEDULE = 1488659970198343757
 
+# Promotions — the bot congratulates + pings a member here whenever they climb
+# the auto ladder (Levy → … → Man-at-Arms). Doubles as a promotion log.
+CHANNEL_PROMOTIONS = 1537381403782811748
+
 # Enlistment / Diplomatic application panel + review
 CHANNEL_ENLISTMENT_PANEL  = 1499769147033260184   # where the buttons message lives
 CHANNEL_ENLISTMENT_REVIEW = 1499769319855231062   # where applications post for review
