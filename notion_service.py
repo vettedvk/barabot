@@ -297,6 +297,40 @@ async def set_member_status(page_id: str, status: str) -> None:
     await nc.pages.update(page_id=page_id, properties={"Status": _select(status)})
 
 
+async def set_member_loa(page_id: str, until: date) -> None:
+    """Put a roster row on LOA and stamp its auto-expiry date."""
+    nc = get_client()
+    await nc.pages.update(page_id=page_id, properties={
+        "Status": _select(config.LOA_STATUS),
+        "LOA Until": {"date": {"start": until.isoformat()}},
+    })
+
+
+async def get_members_on_loa() -> list[dict]:
+    """Every roster row currently marked LOA (not archived)."""
+    return await _query_all(_roster_db(), {"property": "Status", "select": {"equals": config.LOA_STATUS}})
+
+
+def member_loa_until(props: dict) -> Optional[date]:
+    """Parse a row's 'LOA Until' date, or None if unset/invalid."""
+    start = (props.get("LOA Until", {}).get("date") or {}).get("start")
+    if not start:
+        return None
+    try:
+        return date.fromisoformat(start[:10])
+    except ValueError:
+        return None
+
+
+async def restore_member_from_loa(page_id: str) -> None:
+    """Return a row to Active and clear its LOA expiry date."""
+    nc = get_client()
+    await nc.pages.update(page_id=page_id, properties={
+        "Status": _select("Active"),
+        "LOA Until": {"date": None},
+    })
+
+
 async def reactivate_member(
     page_id: str,
     new_discord_username: str,

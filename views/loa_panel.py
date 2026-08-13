@@ -20,19 +20,12 @@ from views.loa_review import LOAReviewView
 
 
 class LOAModal(discord.ui.Modal, title="House Baratheon — LOA Request"):
-    duration = discord.ui.TextInput(
-        label="How long?",
-        placeholder="e.g. 2 weeks, until Aug 30",
+    days = discord.ui.TextInput(
+        label="How many days of leave?",
+        placeholder="e.g. 14",
         style=discord.TextStyle.short,
-        max_length=100,
+        max_length=4,
         required=True,
-    )
-    return_date = discord.ui.TextInput(
-        label="Expected return date (optional)",
-        placeholder="e.g. 2026-08-30",
-        style=discord.TextStyle.short,
-        max_length=100,
-        required=False,
     )
     reason = discord.ui.TextInput(
         label="Reason (optional)",
@@ -43,6 +36,16 @@ class LOAModal(discord.ui.Modal, title="House Baratheon — LOA Request"):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Validate the day count before doing any work.
+        raw = self.days.value.strip()
+        if not raw.isdigit() or not (1 <= int(raw) <= 365):
+            await interaction.response.send_message(
+                "❌ Enter the number of days as a whole number between 1 and 365.",
+                ephemeral=True,
+            )
+            return
+        days = int(raw)
+
         await interaction.response.defer(ephemeral=True)
 
         pages = await ns.get_members_by_discord_id(str(interaction.user.id))
@@ -59,15 +62,13 @@ class LOAModal(discord.ui.Modal, title="House Baratheon — LOA Request"):
             )
             return
 
-        duration = self.duration.value.strip()
-        return_note = self.return_date.value.strip()
         reason = self.reason.value.strip()
 
         log_page = await ns.create_loa_log_entry(
             discord_user_id=str(interaction.user.id),
             reason=reason or "No reason provided.",
-            duration=duration,
-            return_note=return_note,
+            duration=f"{days} days",
+            return_note="",
         )
 
         # Approving sets EVERY active row to LOA, so list them all for the reviewer.
@@ -84,10 +85,11 @@ class LOAModal(discord.ui.Modal, title="House Baratheon — LOA Request"):
             value=f"{interaction.user.mention} (`{interaction.user.id}`)",
             inline=False,
         )
-        embed.add_field(name="Position(s)",     value=positions, inline=False)
-        embed.add_field(name="Duration",        value=duration or "—", inline=True)
-        embed.add_field(name="Expected return", value=return_note or "—", inline=True)
-        embed.add_field(name="Reason",          value=reason or "None provided.", inline=False)
+        embed.add_field(name="Position(s)", value=positions, inline=False)
+        # "Duration" carries the day count; the reviewer's Approve reads it back
+        # to stamp the auto-expiry date.
+        embed.add_field(name="Duration", value=f"{days} days", inline=True)
+        embed.add_field(name="Reason", value=reason or "None provided.", inline=False)
         if log_page:
             embed.set_footer(text=f"ref:{log_page['id']}")
 
