@@ -97,6 +97,7 @@ def new_state() -> dict:
         "days": {},
         "message_id": None,
         "channel_id": None,
+        "reminded": [],   # event unix times already reminded, cleared on wipe
     }
 
 

@@ -15,6 +15,7 @@ catches up if the bot was offline over the boundary.
 
 import logging
 import os
+import time
 
 import discord
 from discord import app_commands
@@ -26,10 +27,13 @@ import notion_service as ns
 import util
 from views.schedule_builder import (
     SchedulerView, load_state, new_state, save_state, sync_public,
-    placeholder_embed, current_uk_monday,
+    placeholder_embed, current_uk_monday, WEEKDAYS,
 )
 
 log = logging.getLogger(__name__)
+
+# How long before a scheduled event to ping the house.
+REMINDER_LEAD_SECONDS = 15 * 60
 
 
 def _configured() -> bool:
@@ -40,9 +44,11 @@ class ScheduleCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.wipe_check.start()
+        self.reminder_check.start()
 
     def cog_unload(self):
         self.wipe_check.cancel()
+        self.reminder_check.cancel()
 
     # ── shared builder opener (create == edit) ───────────────────────────
 
@@ -160,6 +166,65 @@ class ScheduleCog(commands.Cog):
 
     @wipe_check.before_loop
     async def _before_wipe(self):
+        await self.bot.wait_until_ready()
+
+    # ── event reminders (ping House Baratheon 15 min before each event) ──
+
+    @tasks.loop(minutes=5)
+    async def reminder_check(self):
+        try:
+            await self._reminder_check_once()
+        except Exception as exc:
+            log.warning("reminder_check skipped this tick: %s", exc)
+
+    async def _reminder_check_once(self):
+        if not _configured():
+            return
+        state = load_state(await ns.get_schedule_row())
+        days = state.get("days", {})
+        if not days:
+            return
+
+        now = int(time.time())
+        reminded = set(state.get("reminded", []))
+        fired = False
+
+        for idx, entry in days.items():
+            unix = entry.get("unix")
+            event = entry.get("event")
+            if not unix or not event or unix in reminded:
+                continue
+            # Fire once the event is within the lead window but hasn't started.
+            if now >= unix - REMINDER_LEAD_SECONDS and now < unix:
+                channel = self.bot.get_channel(config.CHANNEL_SCHEDULE)
+                if channel is not None:
+                    day_name = WEEKDAYS[int(idx)] if str(idx).isdigit() and int(idx) < 7 else "Today"
+                    role_ping = f"<@&{config.ROLE_HOUSE_BARATHEON}>"
+                    embed = discord.Embed(
+                        title="⚔️ Training starting soon!",
+                        description=(
+                            f"**{event}** begins <t:{unix}:R> (<t:{unix}:t>).\n"
+                            f"Report in and stand ready — Ours is the Fury."
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                    try:
+                        await channel.send(
+                            content=role_ping,
+                            embed=embed,
+                            allowed_mentions=discord.AllowedMentions(roles=True),
+                        )
+                    except discord.HTTPException:
+                        pass
+                reminded.add(unix)
+                fired = True
+
+        if fired:
+            state["reminded"] = sorted(reminded)
+            await save_state(state)
+
+    @reminder_check.before_loop
+    async def _before_reminder(self):
         await self.bot.wait_until_ready()
 
 

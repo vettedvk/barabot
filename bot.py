@@ -100,6 +100,7 @@ class BaratheonBot(commands.Bot):
             "cogs.discharge",
             "cogs.loa",
             "cogs.schedule",
+            "cogs.recognition",
             "cogs.audit",
             "cogs.sync_worker",
             "cogs.help",

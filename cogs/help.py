@@ -22,6 +22,7 @@ MEMBER_COMMANDS = [
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),
+    ("/myprogress", "See how close you are to your next rank (points/trainings/tenure needed)."),
     ("/help", "Show this command list."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
 ]
