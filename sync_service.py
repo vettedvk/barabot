@@ -34,6 +34,7 @@ import discord
 import audit_log
 import config
 import notion_service as ns
+import role_service
 from rank_engine import min_stats_for_rank
 
 log = logging.getLogger(__name__)
@@ -226,6 +227,9 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
                     # council title) — leave the manually-set Notion rank alone.
                     if rank is not None and stats["rank"] != rank:
                         await ns.set_member_rank(page["id"], rank)
+                        # A hand-edited Discord role that bumps a member up the
+                        # ladder is a promotion too — congratulate them.
+                        await role_service.announce_promotion(member, rank, stats["rank"])
                         summary["rank_updated"] += 1
                         changed = True
                         await asyncio.sleep(0.34)
