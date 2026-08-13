@@ -22,6 +22,7 @@ MEMBER_COMMANDS = [
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),
+    ("/myprogress", "See how close you are to your next rank (points/trainings/tenure needed)."),
     ("/help", "Show this command list."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
 ]
@@ -37,6 +38,9 @@ OFFICER_COMMANDS = [
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
     ("/sync", "Reconcile manual Discord role changes into Notion (transfers detachments, updates ranks, logs abandoned posts)."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
+    ("/strike [member] [reason]", "Issue a disciplinary strike (3 active → demote a rank, 5 → removal; strikes expire after 7 days)."),
+    ("/strikes [member]", "View a member's active strikes."),
+    ("/clear_strike [member]", "Clear a member's active strikes."),
     ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
     ("/edit_schedule", "Edit the current week's training schedule."),
     ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),

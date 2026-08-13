@@ -69,6 +69,21 @@ CHANNEL_SCHEDULE = 1488659970198343757
 # the auto ladder (Levy → … → Man-at-Arms). Doubles as a promotion log.
 CHANNEL_PROMOTIONS = 1537381403782811748
 
+# ── Weekly reports (inactivity, digest, leaderboard) ───────────────────────
+# Inactivity report + command digest post to the action/command log, ping Blood
+# of the Storms, and DM the house lead. The leaderboard posts to the advancement
+# channel (CHANNEL_PROMOTIONS).
+HOUSE_LEAD_DM_ID = 897916113499877398   # DM'd the weekly inactivity report + digest
+INACTIVITY_DAYS  = 14                    # no logged attendance in this many days = inactive
+
+# ── Strikes ────────────────────────────────────────────────────────────────
+# A strike counts while it's younger than STRIKE_EXPIRY_DAYS. Reaching
+# STRIKE_DEMOTE active strikes drops the member one ladder rank; STRIKE_REMOVE
+# discharges them.
+STRIKE_EXPIRY_DAYS = 7
+STRIKE_DEMOTE      = 3
+STRIKE_REMOVE      = 5
+
 # Enlistment / Diplomatic application panel + review
 CHANNEL_ENLISTMENT_PANEL  = 1499769147033260184   # where the buttons message lives
 CHANNEL_ENLISTMENT_REVIEW = 1499769319855231062   # where applications post for review

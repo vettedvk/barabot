@@ -13,6 +13,9 @@ row's Status is set to "LOA" (they're coming back) and the LOA role is granted.
 Use /end_loa to restore a member when their leave is over.
 """
 
+import re
+from datetime import date, timedelta
+
 import discord
 
 import audit_log
@@ -44,13 +47,22 @@ class LOAReviewView(discord.ui.View):
             await interaction.followup.send("❌ Couldn't read member from this message.", ephemeral=True)
             return
 
+        # The requested day count is carried in the "Duration" field ("14 days").
+        # Stamp an auto-expiry date so the LOA restores itself; fall back to a
+        # plain LOA (manual /end_loa) if it can't be parsed (e.g. old requests).
+        m = re.search(r"\d+", util.embed_field(embed, "Duration") or "")
+        until = date.today() + timedelta(days=int(m.group())) if m else None
+
         # Set every ACTIVE roster row to LOA (specialised-detachment members hold
         # several). Rows are NOT archived — the member is on leave, not gone.
         pages = await ns.get_members_by_discord_id(str(member_id))
         active = [p for p in pages
                   if ns.extract_member_stats(p["properties"])["status"] == "Active"]
         for page in active:
-            await ns.set_member_status(page["id"], config.LOA_STATUS)
+            if until:
+                await ns.set_member_loa(page["id"], until)
+            else:
+                await ns.set_member_status(page["id"], config.LOA_STATUS)
         if log_page_id:
             await ns.update_loa_log_status(log_page_id, "Approved", decided_by=str(interaction.user))
 
@@ -58,11 +70,12 @@ class LOAReviewView(discord.ui.View):
         guild_member = interaction.guild.get_member(member_id)
         if guild_member:
             await util.grant_role(guild_member, config.ROLE_LOA, reason="LOA approved")
+            back = f" You'll be automatically restored on **{until.isoformat()}**." if until else ""
             try:
                 await guild_member.send(
                     "✅ Your **Leave of Absence** request has been **approved**. "
-                    "Rest well — your post will be here when you return. When you're "
-                    "back, an officer can end your LOA. Ours is the Fury."
+                    f"Rest well — your post will be here when you return.{back} "
+                    "Ours is the Fury."
                 )
             except discord.HTTPException:
                 pass

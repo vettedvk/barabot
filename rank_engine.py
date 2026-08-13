@@ -117,3 +117,46 @@ def min_stats_for_rank(company: str, rank: str) -> dict:
 def is_leadership_rank(rank: str) -> bool:
     """Manually appointed ranks — never touched by the points engine."""
     return rank not in AUTO_LADDERS.get("Black Stags", [])
+
+
+def next_rank_progress(
+    company: str,
+    current_rank: str,
+    points: int,
+    combat_trainings: int = 0,
+    joints: int = 0,
+    prs: int = 0,
+    basic_levy: bool = False,
+    tenure_days: float = 0,
+) -> Optional[dict]:
+    """
+    Describe what a member still needs for their NEXT ladder rank.
+
+    Returns None for members not on an auto ladder (their rank is appointed).
+    Otherwise returns {"next_rank": str|None, "requirements": [(label, have,
+    need, met), ...]}; next_rank is None when they're already at Man-at-Arms.
+    """
+    ladder = AUTO_LADDERS.get(company)
+    if not ladder or current_rank not in ladder:
+        return None
+    cur = ladder.index(current_rank)
+    if cur >= len(ladder) - 1:
+        return {"next_rank": None, "requirements": []}
+
+    nxt = cur + 1
+    trainings = combat_trainings + joints + prs
+    reqs: list[tuple] = []
+    if nxt == 1:      # → Soldier
+        reqs.append(("Attend a Basic Levy Training", "yes" if basic_levy else "no", "yes", basic_levy))
+    elif nxt == 2:    # → Footman
+        reqs.append(("Event points", points, 15, points >= 15))
+        reqs.append(("Trainings attended", trainings, 3, trainings >= 3))
+    elif nxt == 3:    # → Veteran Footman
+        reqs.append(("Event points", points, 30, points >= 30))
+        reqs.append(("Trainings attended", trainings, 6, trainings >= 6))
+        reqs.append(("Joints or PRs", joints + prs, 1, (joints + prs) >= 1))
+    elif nxt == 4:    # → Man-at-Arms
+        reqs.append(("Event points", points, 31, points >= 31))
+        reqs.append(("Days in the house", int(tenure_days), MAN_AT_ARMS_TENURE_DAYS,
+                     tenure_days >= MAN_AT_ARMS_TENURE_DAYS))
+    return {"next_rank": ladder[nxt], "requirements": reqs}

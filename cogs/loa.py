@@ -7,9 +7,12 @@ Requesting LOA is a panel button (see views/loa_panel.py); this cog only
 request is done with the buttons on the review embed (views/loa_review.py).
 """
 
+import logging
+from datetime import date, time as dtime, timezone
+
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 import audit_log
 import config
@@ -17,10 +20,16 @@ import notion_service as ns
 import util
 from views.loa_panel import LOAPanelView
 
+log = logging.getLogger(__name__)
+
 
 class LOACog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.loa_expiry_check.start()
+
+    def cog_unload(self):
+        self.loa_expiry_check.cancel()
 
     # ── /setup_loa_panel ─────────────────────────────────────────────────
 
@@ -129,6 +138,62 @@ class LOACog(commands.Cog):
                 ("Rows restored", str(len(on_loa)), True),
             ],
         )
+
+    # ── daily LOA auto-expiry ────────────────────────────────────────────
+    # Restores members whose LOA end date (the "LOA Until" roster column, set
+    # from the requested day count) has passed. LOAs approved before this
+    # feature have no end date and are left for the manual /end_loa command.
+
+    @tasks.loop(time=dtime(hour=6, minute=0, tzinfo=timezone.utc))
+    async def loa_expiry_check(self):
+        try:
+            await self._loa_expiry_once()
+        except Exception as exc:
+            log.warning("loa_expiry_check skipped: %s", exc)
+
+    async def _loa_expiry_once(self):
+        guild = self.bot.get_guild(config.GUILD_ID)
+        today = date.today()
+
+        by_uid: dict[str, list] = {}
+        for page in await ns.get_members_on_loa():
+            uid = ns.extract_member_stats(page["properties"])["discord_user_id"]
+            if uid:
+                by_uid.setdefault(uid, []).append(page)
+
+        for uid, plist in by_uid.items():
+            due = [p for p in plist
+                   if (u := ns.member_loa_until(p["properties"])) and u <= today]
+            if not due:
+                continue
+            for page in due:
+                await ns.restore_member_from_loa(page["id"])
+
+            member = guild.get_member(int(uid)) if guild and uid.isdigit() else None
+            # Only drop the LOA role once none of their rows are on leave.
+            if member and len(due) == len(plist):
+                await util.remove_role(member, config.ROLE_LOA, reason="LOA expired")
+                try:
+                    await member.send(
+                        "⚡ Welcome back — your **Leave of Absence** has ended and your "
+                        "service record is **Active** again. Ours is the Fury."
+                    )
+                except discord.HTTPException:
+                    pass
+
+            await audit_log.log_event(
+                self.bot,
+                title="⏳ LOA auto-expired",
+                color=discord.Color.gold(),
+                fields=[
+                    ("Member", f"<@{uid}> (`{uid}`)", True),
+                    ("Rows restored", str(len(due)), True),
+                ],
+            )
+
+    @loa_expiry_check.before_loop
+    async def _before_loa_expiry(self):
+        await self.bot.wait_until_ready()
 
 
 async def setup(bot: commands.Bot):
