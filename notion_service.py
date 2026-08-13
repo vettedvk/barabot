@@ -5,7 +5,7 @@ Notion is the single source of truth.
 
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from notion_client import AsyncClient
@@ -535,6 +535,54 @@ async def update_loa_log_status(page_id: str, status: str, decided_by: str = "")
     if decided_by:
         props["Decided By"] = _text(decided_by)
     await nc.pages.update(page_id=page_id, properties=props)
+
+
+# ── Reporting helpers (weekly digest / leaderboard / inactivity) ───────────
+
+def _iso_days_ago(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+
+async def get_recent_log(db_env_var: str, days: int) -> list[dict]:
+    """Every row of the given log DB with Timestamp within the last `days`.
+    Returns [] if the env var isn't configured (best-effort)."""
+    db_id = os.environ.get(db_env_var)
+    if not db_id:
+        return []
+    flt = {"property": "Timestamp", "date": {"on_or_after": _iso_days_ago(days)}}
+    return await _query_all(db_id, flt)
+
+
+def event_log_points(page: dict) -> tuple[str, int, str]:
+    """(member discord id, points, event type) from an Event Log row."""
+    props = page["properties"]
+    member = _get_title(props, "Member")
+    points = int((props.get("Points", {}) or {}).get("number") or 0)
+    etype = ((props.get("Event Type", {}) or {}).get("select") or {}).get("name", "")
+    return member, points, etype
+
+
+async def log_advancement(
+    discord_user_id: str,
+    rank: str,
+    entry_type: str,
+    detail: str = "",
+) -> Optional[dict]:
+    """Record a Promotion/Milestone in the Advancement Log (best-effort)."""
+    db_id = os.environ.get("NOTION_ADVANCEMENT_LOG_DB_ID")
+    if not db_id:
+        return None
+    nc = get_client()
+    return await nc.pages.create(
+        parent={"database_id": db_id},
+        properties={
+            "Member":    _title(discord_user_id),
+            "Rank":      _text(rank),
+            "Type":      _select(entry_type),
+            "Detail":    _text(detail),
+            "Timestamp": _date(datetime.now(timezone.utc)),
+        },
+    )
 
 
 # ── Weekly Schedule helpers ────────────────────────────────────────────────

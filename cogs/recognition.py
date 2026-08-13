@@ -148,6 +148,10 @@ class RecognitionCog(commands.Cog):
                 )
             except discord.HTTPException:
                 pass
+            try:
+                await ns.log_advancement(uid, "", "Milestone", detail=label)
+            except Exception:
+                pass
 
     @milestone_check.before_loop
     async def _before_milestone(self):
