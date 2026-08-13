@@ -596,6 +596,43 @@ def event_log_points(page: dict) -> tuple[str, int, str]:
     return member, points, etype
 
 
+async def create_strike(discord_user_id: str, reason: str, issued_by: str) -> Optional[dict]:
+    db_id = os.environ.get("NOTION_STRIKES_DB_ID")
+    if not db_id:
+        return None
+    nc = get_client()
+    return await nc.pages.create(
+        parent={"database_id": db_id},
+        properties={
+            "Member":    _title(discord_user_id),
+            "Reason":    _text(reason),
+            "Issued By": _text(issued_by),
+            "Timestamp": _date(datetime.now(timezone.utc)),
+        },
+    )
+
+
+async def get_active_strikes(discord_user_id: str, days: int) -> list[dict]:
+    """Strike rows for a member issued within the last `days` (i.e. still active)."""
+    db_id = os.environ.get("NOTION_STRIKES_DB_ID")
+    if not db_id:
+        return []
+    flt = {"and": [
+        {"property": "Member", "title": {"equals": discord_user_id}},
+        {"property": "Timestamp", "date": {"on_or_after": _iso_days_ago(days)}},
+    ]}
+    return await _query_all(db_id, flt)
+
+
+async def clear_active_strikes(discord_user_id: str, days: int) -> int:
+    """Archive a member's active strike rows. Returns how many were cleared."""
+    rows = await get_active_strikes(discord_user_id, days)
+    nc = get_client()
+    for page in rows:
+        await nc.pages.update(page_id=page["id"], archived=True)
+    return len(rows)
+
+
 async def log_advancement(
     discord_user_id: str,
     rank: str,
