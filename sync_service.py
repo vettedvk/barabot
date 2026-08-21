@@ -41,8 +41,10 @@ log = logging.getLogger(__name__)
 
 # Rank assigned when a member holds a detachment role but no rank role within it.
 STARTING_RANK = {
-    "Black Stags":          "Levy",
+    "Stormbreakers":        "Levy",
     "Thunderhooves":        "Levy",
+    "Breaknecks":           "Levy",
+    "The Black Stags":      "Knight Banneret",
     "Stormguard":           "Squire",
     "Knights of the Storm": "Squire",
     "Court":                "Clerk",
@@ -50,12 +52,13 @@ STARTING_RANK = {
 }
 
 # Order used when one "primary" detachment must be picked (import / display).
-# The Stormguard outranks the Knights of the Storm.
-_PRIORITY = {"Black Stags": 0, "Thunderhooves": 1, "Stormguard": 2,
-             "Knights of the Storm": 3, "Court": 4, "High Command": 5}
+_PRIORITY = {"Stormbreakers": 0, "Thunderhooves": 1, "Breaknecks": 2,
+             "The Black Stags": 3, "Stormguard": 4, "Knights of the Storm": 5,
+             "Court": 6, "High Command": 7}
 
-_MAIN_DETACHMENTS = ("Black Stags", "Thunderhooves")
-_DETACHMENTS = ("Black Stags", "Thunderhooves", "Stormguard", "Knights of the Storm", "Court")
+_MAIN_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks")
+_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+                "Stormguard", "Knights of the Storm", "Court")
 
 
 def lorename_from_nick(nick: str) -> str:

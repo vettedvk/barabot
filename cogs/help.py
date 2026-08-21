@@ -17,8 +17,8 @@ import util
 
 # (command, description) grouped by required permission tier
 MEMBER_COMMANDS = [
-    ("Enlistment panel", "Use **Begin Enlistment** (pick your region → retinue) or **Envoy Application** on the enlistment panel to apply (officer-reviewed)."),
-    ("Region panel", "Press **Set My Region** to be auto-sorted into your retinue (EU & Middle East → Black Stags, NA → Thunderhooves, Asia → your choice)."),
+    ("Enlistment panel", "Use **Begin Enlistment** (pick your region), **Court Application**, or **Envoy Application** to apply (reviewed). Recruits are placed into a retinue after their Basic Levy Training."),
+    ("Region panel", "Press **Set My Region** to tag yourself EU or NA (your retinue is assigned after your Basic Levy Training)."),
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),

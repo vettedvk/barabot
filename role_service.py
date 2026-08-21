@@ -201,10 +201,9 @@ async def apply_discharge_roles(member: discord.Member, lorename: str | None = N
         set(config.COMPANY_ROLE_IDS.values())   # retinues + Court
         | set(config.RANK_ROLE_IDS.values())    # ladder + stations + specialised
         | {
-            config.SEPARATOR_COURT, config.SEPARATOR_MILITARY_COMMAND,
-            config.SEPARATOR_STORMGUARD, config.SEPARATOR_KNIGHTS,
-            config.SEPARATOR_RANK, config.SEPARATOR_BLACK_STAGS,
-            config.SEPARATOR_THUNDERHOOVES,
+            config.SEPARATOR_MILITARY_COMMAND, config.SEPARATOR_UPPER_COURT,
+            config.SEPARATOR_COURT, config.SEPARATOR_STATION,
+            config.SEPARATOR_RANK, config.SEPARATOR_RETINUE,
         }
         | {config.ROLE_STATION}
         | set(config.MILITARY_COMMAND_ROLE_IDS)

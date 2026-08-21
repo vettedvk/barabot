@@ -115,7 +115,7 @@ async def get_fleet_member_by_discord_id(discord_id: str) -> Optional[dict]:
         return None
     for page in pages:
         det = ((page["properties"].get("Detachment", {}) or {}).get("select") or {}).get("name", "")
-        if det in ("Black Stags", "Thunderhooves"):
+        if det in config.MAIN_COMBAT_DETACHMENTS:
             return page
     return pages[0]
 
@@ -126,34 +126,34 @@ async def create_member(
     lorename: str,
     discord_username: str,
     discord_user_id: str,
-    detachment: str = "Black Stags",
+    detachment: str = "",
     rank: str = "Levy",
 ) -> dict:
-    """Create a new roster page for a new enlistee (0 pts, starting rank Levy)."""
+    """Create a new roster page for a new enlistee (0 pts, starting rank Levy).
+    A blank detachment means an unsorted Levy — placed after Basic Levy Training."""
     nc = get_client()
-    page = await nc.pages.create(
-        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]},
-        properties={
-            "Username":          _title(roblox_username),
-            "Roblox ID":         _text(roblox_id),
-            "Lorename":          _text(lorename),
-            "Discord Username":  _text(discord_username),
-            "Discord User ID":   _text(str(discord_user_id)),
-            "Detachment":        _select(detachment),
-            "Rank":              _select(rank),
-            "Event Points":      _number(0),
-            "Tidepoints":        _number(0),
-            "Combat Trainings":  _number(0),
-            "Joints":            _number(0),
-            "Skirmishes":        _number(0),
-            "PRs":               _number(0),
-            "Status":            _select("Active"),
-            "Date Enlisted":     _date(datetime.now(timezone.utc)),
-            config.BASIC_LEVY_FIELD: _checkbox(False),
-            "Days Served":       _number(0),
-        },
-    )
-    return page
+    props = {
+        "Username":          _title(roblox_username),
+        "Roblox ID":         _text(roblox_id),
+        "Lorename":          _text(lorename),
+        "Discord Username":  _text(discord_username),
+        "Discord User ID":   _text(str(discord_user_id)),
+        "Rank":              _select(rank),
+        "Event Points":      _number(0),
+        "Tidepoints":        _number(0),
+        "Combat Trainings":  _number(0),
+        "Joints":            _number(0),
+        "Skirmishes":        _number(0),
+        "PRs":               _number(0),
+        "Status":            _select("Active"),
+        "Date Enlisted":     _date(datetime.now(timezone.utc)),
+        config.BASIC_LEVY_FIELD: _checkbox(False),
+        "Days Served":       _number(0),
+    }
+    if detachment:
+        props["Detachment"] = _select(detachment)
+    return await nc.pages.create(
+        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]}, properties=props)
 
 
 async def apply_approved_points(
@@ -334,30 +334,28 @@ async def restore_member_from_loa(page_id: str) -> None:
 async def reactivate_member(
     page_id: str,
     new_discord_username: str,
-    detachment: str = "Black Stags",
+    detachment: str = "",
     rank: str = "Levy",
 ) -> None:
-    """Unarchive and reset a prior member for re-enlistment."""
+    """Unarchive and reset a prior member for re-enlistment. A blank detachment
+    leaves them unsorted (placed after Basic Levy Training)."""
     nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Status":           _select("Active"),
-            "Discord Username": _text(new_discord_username),
-            "Event Points":     _number(0),
-            "Tidepoints":       _number(0),
-            "Combat Trainings": _number(0),
-            "Joints":           _number(0),
-            "Skirmishes":       _number(0),
-            "PRs":              _number(0),
-            "Rank":             _select(rank),
-            "Detachment":       _select(detachment),
-            "Date Enlisted":    _date(datetime.now(timezone.utc)),
-            config.BASIC_LEVY_FIELD: _checkbox(False),
-            "Days Served":      _number(0),
-        },
-        archived=False,
-    )
+    props = {
+        "Status":           _select("Active"),
+        "Discord Username": _text(new_discord_username),
+        "Event Points":     _number(0),
+        "Tidepoints":       _number(0),
+        "Combat Trainings": _number(0),
+        "Joints":           _number(0),
+        "Skirmishes":       _number(0),
+        "PRs":              _number(0),
+        "Rank":             _select(rank),
+        "Date Enlisted":    _date(datetime.now(timezone.utc)),
+        config.BASIC_LEVY_FIELD: _checkbox(False),
+        "Days Served":      _number(0),
+    }
+    props["Detachment"] = _select(detachment) if detachment else {"select": None}
+    await nc.pages.update(page_id=page_id, properties=props, archived=False)
 
 
 async def get_all_active_members() -> list[dict]:
@@ -371,16 +369,21 @@ async def get_all_roster_pages() -> list[dict]:
 
 
 # ── Roster V2 migration (new combat-role structure) ─────────────────────────
-# One-off: copy the legacy roster into the new "Baratheon Roster V2" DB, one row
-# per member, WITHOUT a detachment (unsorted). The live bot keeps using the old
-# roster until the structure cutover.
+# One-off: copy the LEGACY roster (NOTION_ROSTER_LEGACY_DB_ID) into the now-active
+# roster (NOTION_ROSTER_DB_ID = V2), one row per member, WITHOUT a detachment.
+
+async def get_legacy_roster_pages() -> list[dict]:
+    """Every non-archived page in the legacy roster (migration source)."""
+    db_id = os.environ.get("NOTION_ROSTER_LEGACY_DB_ID")
+    if not db_id:
+        return []
+    return await _query_all(db_id)
+
 
 async def get_roster_v2_discord_ids() -> set[str]:
-    db_id = os.environ.get("NOTION_ROSTER_V2_DB_ID")
-    if not db_id:
-        return set()
+    """Discord IDs already present in the active (V2) roster."""
     ids = set()
-    for page in await _query_all(db_id):
+    for page in await _query_all(_roster_db()):
         uid = _get_text(page["properties"], "Discord User ID")
         if uid:
             ids.add(uid)
@@ -394,8 +397,8 @@ async def create_roster_v2_member(
     prs: int, skirmishes: int, days_served: int, date_enlisted: str,
     basic_levy: bool,
 ) -> None:
-    """Create one UNSORTED member row (no Detachment) in Roster V2."""
-    db_id = os.environ["NOTION_ROSTER_V2_DB_ID"]
+    """Create one UNSORTED member row (no Detachment) in the active roster."""
+    db_id = _roster_db()
     nc = get_client()
     props = {
         "Username":         _title(roblox_username or ""),

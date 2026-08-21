@@ -61,9 +61,9 @@ class MigrateV2Cog(commands.Cog):
             await interaction.response.send_message(
                 "❌ Heir / Lady / Lord of Storm's End only.", ephemeral=True)
             return
-        if not os.environ.get("NOTION_ROSTER_V2_DB_ID"):
+        if not os.environ.get("NOTION_ROSTER_LEGACY_DB_ID"):
             await interaction.response.send_message(
-                "❌ Roster V2 not configured (set NOTION_ROSTER_V2_DB_ID).", ephemeral=True)
+                "❌ Legacy roster not configured (set NOTION_ROSTER_LEGACY_DB_ID).", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -72,7 +72,7 @@ class MigrateV2Cog(commands.Cog):
 
         # Group every non-archived legacy row (Active + LOA) by Discord ID.
         by_uid: dict[str, list[dict]] = {}
-        for page in await ns.get_all_roster_pages():
+        for page in await ns.get_legacy_roster_pages():
             s = ns.extract_member_stats(page["properties"])
             uid = s["discord_user_id"]
             if uid:

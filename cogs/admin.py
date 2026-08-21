@@ -33,6 +33,18 @@ from roblox import validate_roblox_user, RobloxValidationError
 from sync_service import STARTING_RANK, derive_detachment_and_rank, lorename_from_nick
 from views.self_update_panel import SelfUpdatePanelView
 
+# Detachment choice lists (new combat-role structure), shared by the roster
+# commands so there's one place to update.
+_DETACHMENT_CHOICES = [
+    app_commands.Choice(name=d, value=d) for d in
+    ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+     "Stormguard", "Knights of the Storm", "Court", "High Command")
+]
+# Detachments a member can be force-enlisted straight into (active mains).
+_ENLIST_CHOICES = [
+    app_commands.Choice(name=d, value=d) for d in ("Stormbreakers", "Thunderhooves")
+]
+
 
 def _is_admin(interaction: discord.Interaction) -> bool:
     return util.is_admin(interaction.user)
@@ -470,14 +482,7 @@ class AdminCog(commands.Cog):
         company="Target detachment",
         rank="Rank in the new detachment (optional; defaults to that detachment's starting rank)",
     )
-    @app_commands.choices(company=[
-        app_commands.Choice(name="Black Stags",          value="Black Stags"),
-        app_commands.Choice(name="Thunderhooves",        value="Thunderhooves"),
-        app_commands.Choice(name="Stormguard",           value="Stormguard"),
-        app_commands.Choice(name="Knights of the Storm", value="Knights of the Storm"),
-        app_commands.Choice(name="Court",                value="Court"),
-        app_commands.Choice(name="High Command",         value="High Command"),
-    ])
+    @app_commands.choices(company=_DETACHMENT_CHOICES)
     @app_commands.autocomplete(rank=rank_autocomplete)
     @_officer_check()
     async def set_company(
@@ -906,7 +911,8 @@ class AdminCog(commands.Cog):
             if uid:
                 groups.setdefault(uid, []).append((page, stats))
 
-        ELIGIBLE = {"Black Stags", "Thunderhooves", "Stormguard", "Knights of the Storm", "Court"}
+        ELIGIBLE = {"Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+                    "Stormguard", "Knights of the Storm", "Court"}
         discharge: list[dict] = []
         review: list[str] = []
         flagged: list[dict] = []  # Knight/Guardsman — protected, but listed for manual purge
@@ -1031,10 +1037,7 @@ class AdminCog(commands.Cog):
         roblox_id="Their numeric Roblox ID (required for military enlistment).",
         lorename="Their in-universe lore name (optional).",
     )
-    @app_commands.choices(fleet=[
-        app_commands.Choice(name="Black Stags (EU / Middle East)", value="Black Stags"),
-        app_commands.Choice(name="Thunderhooves (NA)",             value="Thunderhooves"),
-    ])
+    @app_commands.choices(fleet=_ENLIST_CHOICES)
     @_officer_check()
     async def force_enlist(
         self,
@@ -1199,14 +1202,7 @@ class AdminCog(commands.Cog):
         roblox_username="Roblox username (optional)",
         roblox_id="Roblox ID (optional)",
     )
-    @app_commands.choices(detachment=[
-        app_commands.Choice(name="Black Stags",          value="Black Stags"),
-        app_commands.Choice(name="Thunderhooves",        value="Thunderhooves"),
-        app_commands.Choice(name="Stormguard",           value="Stormguard"),
-        app_commands.Choice(name="Knights of the Storm", value="Knights of the Storm"),
-        app_commands.Choice(name="Court",                value="Court"),
-        app_commands.Choice(name="High Command",         value="High Command"),
-    ])
+    @app_commands.choices(detachment=_DETACHMENT_CHOICES)
     @app_commands.autocomplete(rank=notion_rank_autocomplete)
     @_officer_check()
     async def add_roster_entry(
@@ -1278,14 +1274,7 @@ class AdminCog(commands.Cog):
         member="The Discord member",
         detachment="Which detachment entry to remove (omit to remove ALL their entries)",
     )
-    @app_commands.choices(detachment=[
-        app_commands.Choice(name="Black Stags",          value="Black Stags"),
-        app_commands.Choice(name="Thunderhooves",        value="Thunderhooves"),
-        app_commands.Choice(name="Stormguard",           value="Stormguard"),
-        app_commands.Choice(name="Knights of the Storm", value="Knights of the Storm"),
-        app_commands.Choice(name="Court",                value="Court"),
-        app_commands.Choice(name="High Command",         value="High Command"),
-    ])
+    @app_commands.choices(detachment=_DETACHMENT_CHOICES)
     @_officer_check()
     async def remove_roster_entry(
         self,

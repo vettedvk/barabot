@@ -64,8 +64,8 @@ class RecognitionCog(commands.Cog):
         page = await ns.get_fleet_member_by_discord_id(str(target.id))
         if page is None:
             await interaction.followup.send(
-                "❌ No retinue roster record found — this only applies to Black Stags "
-                "and Thunderhooves members on the points ladder.", ephemeral=True)
+                "❌ No retinue roster record found — this only applies to main combat "
+                "retinue members on the points ladder.", ephemeral=True)
             return
 
         stats = ns.extract_member_stats(page["properties"])

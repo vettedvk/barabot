@@ -28,12 +28,11 @@ class RegionCog(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="🌍 House Baratheon — Retinue Sorting",
+            title="🌍 House Baratheon — Set Your Region",
             description=(
-                "Your retinue is decided by your region: **EU & Middle East → Black "
-                "Stags**, **NA → Thunderhooves**, and **Asia may choose either**.\n\n"
-                "Press **Set My Region** below to be sorted into your retinue — you "
-                "can also use it to move retinue if your region has changed."
+                "Press **Set My Region** below to tag yourself **EU** or **NA**. "
+                "It's just a region tag — your retinue is assigned after your Basic "
+                "Levy Training, not by region."
             ),
             color=discord.Color.dark_gold(),
         )

@@ -23,11 +23,13 @@ import notion_service as ns
 import role_service
 import util
 from rank_engine import compute_rank, never_demote
+from views.placement_panel import PlacementView
 
 log = logging.getLogger(__name__)
 
-# The retinues summoned by a House-wide event.
-_HOUSE_WIDE = ["Black Stags", "Thunderhooves", "Stormguard", "Knights of the Storm"]
+# The retinues summoned by a House-wide event (active retinues).
+_HOUSE_WIDE = ["Stormbreakers", "Thunderhooves", "The Black Stags",
+               "Stormguard", "Knights of the Storm"]
 
 # Attendee parsing: <@123>, <@!123>, or bare 17-20 digit IDs.
 _ID_RE = re.compile(r"<@!?(\d{17,20})>|\b(\d{17,20})\b")
@@ -50,8 +52,9 @@ class EventsCog(commands.Cog):
     @app_commands.describe(detachment="Which retinue to summon", title="Event title / description")
     @app_commands.choices(detachment=[
         app_commands.Choice(name="House-wide (everyone)",  value="House-wide"),
-        app_commands.Choice(name="Black Stags",            value="Black Stags"),
+        app_commands.Choice(name="Stormbreakers",          value="Stormbreakers"),
         app_commands.Choice(name="Thunderhooves",          value="Thunderhooves"),
+        app_commands.Choice(name="The Black Stags",        value="The Black Stags"),
         app_commands.Choice(name="Stormguard",             value="Stormguard"),
         app_commands.Choice(name="Knights of the Storm",   value="Knights of the Storm"),
     ])
@@ -171,6 +174,7 @@ class EventsCog(commands.Cog):
         promoted: list[str] = []
         not_in_guild: list[str] = []
         no_roster: list[str] = []
+        placement_candidates: list[tuple[str, str]] = []  # unsorted Levys after Basic Levy
         errors = 0
 
         for uid in ids:
@@ -221,6 +225,10 @@ class EventsCog(commands.Cog):
                         log.warning("log_event: event-log entry failed for %s: %s", uid, exc)
 
                 logged.append(str(member))
+                # Unsorted Levy who just did their Basic Levy Training → offer
+                # the host a placement control at the end.
+                if etype == config.BASIC_LEVY_EVENT and not company:
+                    placement_candidates.append((str(uid), str(member)))
                 if new_rank != stats["rank"]:
                     await role_service.apply_rank_and_company(
                         member, company, new_rank,
@@ -258,6 +266,19 @@ class EventsCog(commands.Cog):
         if not_in_guild:
             msg += "\n\n⚠️ __Unknown IDs (not in the server):__ " + ", ".join(not_in_guild)
         await interaction.followup.send(msg[:1990], ephemeral=True)
+
+        # Basic Levy Training → post an in-channel placement control so the host
+        # can sort each unsorted attendee into a retinue (they become Soldier).
+        if placement_candidates and interaction.channel is not None:
+            view = PlacementView(interaction.user.id, placement_candidates)
+            try:
+                await interaction.channel.send(
+                    content=f"{interaction.user.mention} — place your new recruits into a retinue:",
+                    embed=view.embed(), view=view,
+                    allowed_mentions=discord.AllowedMentions(users=True),
+                )
+            except discord.HTTPException as exc:
+                log.warning("log_event: couldn't post placement view: %s", exc)
 
         await audit_log.log_event(
             self.bot,

@@ -27,8 +27,9 @@ from typing import Optional
 # Auto-promotion ladders (index 0 = starting rank). Companies not listed here
 # use fully manual ranks and are never auto-computed.
 AUTO_LADDERS = {
-    "Black Stags":   ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
+    "Stormbreakers": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
     "Thunderhooves": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
+    "Breaknecks":    ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
 }
 
 # Minimum stats that justify sitting at each ladder tier — used to seed
@@ -116,7 +117,7 @@ def min_stats_for_rank(company: str, rank: str) -> dict:
 
 def is_leadership_rank(rank: str) -> bool:
     """Manually appointed ranks — never touched by the points engine."""
-    return rank not in AUTO_LADDERS.get("Black Stags", [])
+    return rank not in AUTO_LADDERS.get("Stormbreakers", [])
 
 
 def next_rank_progress(
