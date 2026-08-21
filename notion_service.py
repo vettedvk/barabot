@@ -370,6 +370,56 @@ async def get_all_roster_pages() -> list[dict]:
     return await _query_all(_roster_db())
 
 
+# ── Roster V2 migration (new combat-role structure) ─────────────────────────
+# One-off: copy the legacy roster into the new "Baratheon Roster V2" DB, one row
+# per member, WITHOUT a detachment (unsorted). The live bot keeps using the old
+# roster until the structure cutover.
+
+async def get_roster_v2_discord_ids() -> set[str]:
+    db_id = os.environ.get("NOTION_ROSTER_V2_DB_ID")
+    if not db_id:
+        return set()
+    ids = set()
+    for page in await _query_all(db_id):
+        uid = _get_text(page["properties"], "Discord User ID")
+        if uid:
+            ids.add(uid)
+    return ids
+
+
+async def create_roster_v2_member(
+    *, roblox_username: str, roblox_id: str, discord_user_id: str,
+    discord_username: str, lorename: str, rank: str, status: str,
+    points: int, tidepoints: int, combat_trainings: int, joints: int,
+    prs: int, skirmishes: int, days_served: int, date_enlisted: str,
+    basic_levy: bool,
+) -> None:
+    """Create one UNSORTED member row (no Detachment) in Roster V2."""
+    db_id = os.environ["NOTION_ROSTER_V2_DB_ID"]
+    nc = get_client()
+    props = {
+        "Username":         _title(roblox_username or ""),
+        "Roblox ID":        _text(roblox_id or ""),
+        "Discord User ID":  _text(discord_user_id),
+        "Discord Username": _text(discord_username or ""),
+        "Lorename":         _text(lorename or ""),
+        "Status":           _select(status or "Active"),
+        "Event Points":     _number(points),
+        "Tidepoints":       _number(tidepoints),
+        "Combat Trainings": _number(combat_trainings),
+        "Joints":           _number(joints),
+        "PRs":              _number(prs),
+        "Skirmishes":       _number(skirmishes),
+        "Days Served":      _number(days_served),
+        "Basic Levy Training": _checkbox(basic_levy),
+    }
+    if rank:
+        props["Rank"] = _select(rank)
+    if date_enlisted:
+        props["Date Enlisted"] = {"date": {"start": date_enlisted[:10]}}
+    await nc.pages.create(parent={"database_id": db_id}, properties=props)
+
+
 async def archive_page(page_id: str) -> None:
     """Archive (trash) a Notion page without altering its properties."""
     await get_client().pages.update(page_id=page_id, archived=True)

@@ -112,6 +112,7 @@ class BaratheonBot(commands.Bot):
             "cogs.role_hygiene",
             "cogs.region",
             "cogs.migration",
+            "cogs.migrate_v2",
             "cogs.trials",
         ]:
             await self.load_extension(cog)
