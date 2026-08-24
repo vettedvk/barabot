@@ -137,6 +137,17 @@ COMPANY_ROLE_IDS = {
     "Court":                1525947287803662521,   # == ROLE_COURT
 }
 
+# Defunct roles from the old region-based structure — stripped by
+# /apply_roster_roles during the transition. No-ops if the role is already gone.
+LEGACY_ROLE_IDS = {
+    1515430116501753948,  # old Black Stags retinue (region)
+    1515430181135716432,  # old Thunderhooves retinue (region)
+    1522250356762083409,  # old Knights separator
+    1526397224542797944,  # old Black Stags separator
+    1488659968067371085,  # old Thunderhooves separator
+    1522252463057670236,  # old Util separator
+}
+
 # Main combat detachments (the auto points-ladder ones).
 MAIN_COMBAT_DETACHMENTS = ["Stormbreakers", "Thunderhooves", "Breaknecks"]
 # Retinues a Levy can be placed into after Basic Levy Training (active mains).
@@ -225,6 +236,17 @@ COURT_STATION_ROLE_IDS = {RANK_ROLE_IDS[r] for r in COURT_STATION_RANKS}
 # retinue row). The rest are court-only. Assumption pending confirmation.
 COURT_DUAL_RANKS      = {"Clerk", "Cupbearer", "Handmaiden", "Secretary of the Court"}
 COURT_EXCLUSIVE_RANKS = {"Emissary", "Quartermaster", "Chancellor"}
+
+# ── Court written test ─────────────────────────────────────────────────────
+# Questions asked in the Court application's written test. Max 5 (Discord modal
+# limit). PLACEHOLDERS — swap in the real questions; answers are shown to the
+# reviewer for manual grading.
+COURT_TEST_QUESTIONS = [
+    "Why do you want to serve in the Court of Storm's End?",
+    "What relevant experience or skills do you bring to the Court?",
+    "How many days a week can you reliably be active?",
+    "Describe how you'd handle a dispute between two members.",
+]
 
 # Officer/manual ranks: never auto-promoted, protected from /purge auto-discharge.
 OFFICER_RANKS = (

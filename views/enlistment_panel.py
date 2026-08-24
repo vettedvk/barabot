@@ -114,18 +114,14 @@ class RegionChoiceView(discord.ui.View):
         return callback
 
 
-class CourtModal(discord.ui.Modal, title="House Baratheon — Court Application"):
+class CourtIdentityModal(discord.ui.Modal, title="House Baratheon — Court Application"):
+    """Step 1: identity. Step 2 (the written test) follows via a button."""
     roblox_id = discord.ui.TextInput(
         label="Roblox ID", placeholder="Your numeric Roblox ID", max_length=20, required=True)
     roblox_username = discord.ui.TextInput(
         label="Roblox Username", placeholder="Your Roblox username", max_length=50, required=True)
     lorename = discord.ui.TextInput(
         label="Lore Name", placeholder="Your in-universe character name", max_length=100, required=True)
-    # TODO: replace this stand-in with the real written test once questions are provided.
-    motivation = discord.ui.TextInput(
-        label="Why join the Court?",
-        placeholder="A short paragraph (a full written test will follow).",
-        style=discord.TextStyle.paragraph, max_length=800, required=True)
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -140,17 +136,53 @@ class CourtModal(discord.ui.Modal, title="House Baratheon — Court Application"
         except RobloxValidationError as exc:
             await interaction.followup.send(f"❌ {exc}", ephemeral=True)
             return
+        await interaction.followup.send(
+            "⚖️ Identity confirmed. Press **Begin Written Test** to finish your application.",
+            view=CourtTestButtonView(roblox_data["name"], str(roblox_data["id"]), self.lorename.value),
+            ephemeral=True)
 
+
+class CourtTestButtonView(discord.ui.View):
+    def __init__(self, roblox_name: str, roblox_id: str, lorename: str):
+        super().__init__(timeout=600)
+        self.roblox_name = roblox_name
+        self.roblox_id = roblox_id
+        self.lorename = lorename
+
+    @discord.ui.button(label="Begin Written Test", style=discord.ButtonStyle.primary, emoji="📝")
+    async def begin(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            CourtTestModal(self.roblox_name, self.roblox_id, self.lorename))
+
+
+class CourtTestModal(discord.ui.Modal, title="Court — Written Test"):
+    def __init__(self, roblox_name: str, roblox_id: str, lorename: str):
+        super().__init__()
+        self.roblox_name = roblox_name
+        self.roblox_id = roblox_id
+        self.lorename = lorename
+        self._inputs: list[discord.ui.TextInput] = []
+        for i, question in enumerate(config.COURT_TEST_QUESTIONS[:5]):
+            field = discord.ui.TextInput(
+                label=(question[:45] or f"Question {i + 1}"),
+                placeholder=question[:100],
+                style=discord.TextStyle.paragraph, max_length=500, required=True)
+            self._inputs.append(field)
+            self.add_item(field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(title="⚖️ Court Application — Pending Review",
                               color=discord.Color.purple())
         embed.add_field(name="Type", value="Court", inline=True)
         embed.add_field(name="Applicant",
                         value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
-        embed.add_field(name="Roblox Username", value=roblox_data["name"], inline=True)
-        embed.add_field(name="Roblox ID", value=str(roblox_data["id"]), inline=True)
-        embed.add_field(name="Lore Name", value=self.lorename.value, inline=False)
-        embed.add_field(name="Motivation", value=self.motivation.value[:1024], inline=False)
-        embed.set_footer(text="Approving grants Court entry (Clerk). Written test pending.")
+        embed.add_field(name="Roblox Username", value=self.roblox_name, inline=True)
+        embed.add_field(name="Roblox ID", value=self.roblox_id, inline=True)
+        embed.add_field(name="Lore Name", value=self.lorename, inline=False)
+        for question, field in zip(config.COURT_TEST_QUESTIONS, self._inputs):
+            embed.add_field(name=f"❓ {question[:250]}", value=(field.value or "—")[:1024], inline=False)
+        embed.set_footer(text="Approving grants Court entry (Clerk).")
 
         review_channel = interaction.client.get_channel(config.CHANNEL_ENLISTMENT_REVIEW)
         if review_channel is None:
@@ -159,7 +191,8 @@ class CourtModal(discord.ui.Modal, title="House Baratheon — Court Application"
             return
         await review_channel.send(embed=embed, view=EnlistmentReviewView())
         await interaction.followup.send(
-            "⚖️ Your Court application has been submitted for review.", ephemeral=True)
+            "⚖️ Your Court application and written test have been submitted for review.",
+            ephemeral=True)
 
 
 class EnvoyModal(discord.ui.Modal, title="House Baratheon — Envoy Application"):
@@ -208,7 +241,7 @@ class EnlistmentPanelView(discord.ui.View):
     @discord.ui.button(label="Court Application", style=discord.ButtonStyle.secondary,
                        emoji="⚖️", custom_id="vel_court_apply")
     async def court_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CourtModal())
+        await interaction.response.send_modal(CourtIdentityModal())
 
     @discord.ui.button(label="Envoy Application", style=discord.ButtonStyle.secondary,
                        custom_id="vel_envoy_apply")

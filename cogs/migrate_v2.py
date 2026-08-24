@@ -22,6 +22,7 @@ from discord.ext import commands
 
 import config
 import notion_service as ns
+import role_service
 import util
 
 log = logging.getLogger(__name__)
@@ -128,6 +129,77 @@ class MigrateV2Cog(commands.Cog):
             + "\n\nEveryone is **unsorted** (no detachment) — place them into retinues via Discord.",
             ephemeral=True,
         )
+
+    # ── /apply_roster_roles — sync Discord roles FROM the roster ──────────
+
+    @app_commands.command(
+        name="apply_roster_roles",
+        description="[Ruler] Sync Discord roles from the roster: strip legacy roles, apply rank/detachment.",
+    )
+    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
+    @app_commands.describe(member="Just this member (omit for the whole active roster).",
+                           dry_run="Preview only (default). Set False to apply.")
+    async def apply_roster_roles(self, interaction: discord.Interaction,
+                                 member: discord.Member = None, dry_run: bool = True):
+        if not util.is_ruler(interaction.user):
+            await interaction.response.send_message(
+                "❌ Heir / Lady / Lord of Storm's End only.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+
+        by_uid: dict[str, list[dict]] = {}
+        for page in await ns.get_all_active_members():
+            s = ns.extract_member_stats(page["properties"])
+            if s["discord_user_id"]:
+                by_uid.setdefault(s["discord_user_id"], []).append(s)
+
+        targets = [str(member.id)] if member else list(by_uid.keys())
+        changed = errors = 0
+        preview: list[str] = []
+
+        for uid in targets:
+            rows = by_uid.get(uid)
+            if not rows:
+                continue
+            gm = guild.get_member(int(uid)) if uid.isdigit() else None
+            if gm is None:
+                continue
+            # Prefer a sorted row (has a detachment); else the unsorted one.
+            primary = max(rows, key=lambda r: (1 if r["detachment"] else 0, r["points"]))
+            det = primary["detachment"]
+            rank = primary["rank"] or "Levy"
+            legacy = [r for r in gm.roles if r.id in config.LEGACY_ROLE_IDS]
+
+            if dry_run:
+                if len(preview) < 30:
+                    tag = f"{det or 'Unsorted'} / {rank}"
+                    strip = f" −legacy[{', '.join(r.name for r in legacy)}]" if legacy else ""
+                    preview.append(f"• {gm.display_name}: →{tag}{strip}")
+                changed += 1
+                continue
+
+            try:
+                bot_top = guild.me.top_role
+                drop = [r for r in legacy if r < bot_top and not r.managed]
+                if drop:
+                    await gm.remove_roles(*drop, reason="Legacy role cleanup (restructure)")
+                await role_service.apply_rank_and_company(gm, det, rank, lorename=primary["lorename"])
+                await role_service.add_house_membership_roles(gm)
+                changed += 1
+                await asyncio.sleep(1.0)  # stay under Discord's member-edit budget
+            except Exception as exc:
+                errors += 1
+                log.error("apply_roster_roles failed for %s: %s", uid, exc)
+
+        mode = "🔎 DRY RUN — nothing changed" if dry_run else "✅ Applied"
+        msg = (f"**{mode}**\nMembers to update: **{changed}**"
+               + (f"\nErrors: **{errors}**" if errors else ""))
+        if preview:
+            msg += "\n\n__Preview (first 30):__\n" + "\n".join(preview)
+        if dry_run:
+            msg += "\n\nRun `/apply_roster_roles dry_run:False` to apply."
+        await interaction.followup.send(msg[:1990], ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

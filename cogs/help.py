@@ -79,7 +79,9 @@ RULER_COMMANDS = [
     ("/clear_roster", "DANGER: archive every row in the Notion roster (for a clean re-import). Asks for confirmation."),
     ("/import_roster [dry_run]", "Bulk-import members from their Discord roles into Notion, seeding rank-appropriate points (preview first)."),
     ("/migrate_roster [dry_run]", "Match roster lorenames to the tracking DB and backfill Roblox IDs/usernames (preview first)."),
-    ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports knightless officers and retinue conflicts. Preview first."),
+    ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports retinue conflicts. Preview first."),
+    ("/migrate_roster_v2", "One-off: copy every member from the legacy roster into the new Roster V2, unsorted (no detachment)."),
+    ("/apply_roster_roles [member] [dry_run]", "Sync Discord roles from the roster — strip legacy roles and apply each member's rank/detachment. Preview first."),
     ("/toggle_sync", "Turn the periodic Discord→Notion sync on/off at runtime."),
     ("/undo_role_changes [hours] [dry_run]", "Reverse the bot's own role changes over the last N hours (incident recovery; preview first)."),
 ]
