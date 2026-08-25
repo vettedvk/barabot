@@ -238,14 +238,22 @@ COURT_DUAL_RANKS      = {"Clerk", "Cupbearer", "Handmaiden", "Secretary of the C
 COURT_EXCLUSIVE_RANKS = {"Emissary", "Quartermaster", "Chancellor"}
 
 # ── Court written test ─────────────────────────────────────────────────────
-# Questions asked in the Court application's written test. Max 5 (Discord modal
-# limit). PLACEHOLDERS — swap in the real questions; answers are shown to the
-# reviewer for manual grading.
+# Max 5 questions (Discord modal limit). Each is (short_label, full_question):
+# the short label is the modal field title (≤45 chars); the full question is
+# shown before the test and as the review-embed field name.
 COURT_TEST_QUESTIONS = [
-    "Why do you want to serve in the Court of Storm's End?",
-    "What relevant experience or skills do you bring to the Court?",
-    "How many days a week can you reliably be active?",
-    "Describe how you'd handle a dispute between two members.",
+    ("Why House Baratheon?",
+     "What made you choose House Baratheon over others?"),
+    ("Why Court over Military?",
+     "Why do you want to join the Court instead of the Military? "
+     "(You can still be in both depending on assignment.)"),
+    ("Your end goal in the house?",
+     "Upon joining the house, what will be your end goal?"),
+    ("Anything we should know?",
+     "Is there anything we should know about you?"),
+    ("Admin / document experience?",
+     "Do you have any past experience creating documents or doing "
+     "administration for other groups/genres?"),
 ]
 
 # Officer/manual ranks: never auto-promoted, protected from /purge auto-discharge.

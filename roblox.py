@@ -9,6 +9,32 @@ class RobloxValidationError(Exception):
     pass
 
 
+async def fetch_roblox_by_id(roblox_id: str) -> dict:
+    """
+    Resolve a Roblox ID to its account. Returns {"id": int, "name": str}.
+    Used where only the ID is collected (e.g. Court applications).
+    Raises RobloxValidationError with a user-facing message on failure.
+    """
+    roblox_id = roblox_id.strip()
+    if not roblox_id.isdigit():
+        raise RobloxValidationError(
+            "Roblox ID must be a number — paste your numeric Roblox ID, not a URL or username.")
+    uid = int(roblox_id)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.get(f"https://users.roblox.com/v1/users/{uid}")
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise RobloxValidationError(f"Roblox ID `{uid}` does not exist. Double-check your ID.")
+            raise RobloxValidationError("Roblox returned an error while verifying your ID. Try again shortly.")
+        except httpx.HTTPError as exc:
+            raise RobloxValidationError(
+                f"Could not reach Roblox to verify your ID. Try again shortly. ({exc})")
+        data = resp.json()
+    return {"id": uid, "name": data.get("name") or str(uid)}
+
+
 async def validate_roblox_user(roblox_id: str, roblox_username: str) -> dict:
     """
     Validates that the given Roblox ID exists and that the username matches.
