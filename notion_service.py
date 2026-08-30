@@ -189,21 +189,55 @@ async def apply_approved_points(
     await nc.pages.update(page_id=page_id, properties=props)
 
 
+async def apply_event_result(
+    page_id: str,
+    current_props: dict,
+    new_points: int,
+    event_type: str,
+    new_rank: str,
+) -> None:
+    """
+    Per-rank points model. Unlike apply_approved_points (which ADDED to a
+    cumulative career total), this SETS 'Event Points' to `new_points` — the
+    in-rank remainder after any promotions the caller already resolved — and
+    sets the (possibly promoted) rank. Still increments the attendance counter
+    (or ticks the Basic Levy Training checkbox) and refreshes Days Served.
+    """
+    nc = get_client()
+    props: dict = {
+        "Event Points": _number(max(0, new_points)),
+        "Rank":         _select(new_rank),
+        "Days Served":  _number(days_served_value(current_props)),
+    }
+    if event_type == config.BASIC_LEVY_EVENT:
+        props[config.BASIC_LEVY_FIELD] = _checkbox(True)
+    else:
+        counter_field = config.EVENT_COUNTER_FIELDS.get(event_type)
+        if counter_field:
+            old_count = _get_number(current_props, counter_field)
+            props[counter_field] = _number(old_count + 1)
+    await nc.pages.update(page_id=page_id, properties=props)
+
+
 async def apply_tidepoints_grant(
     page_id: str,
     current_props: dict,
-    amount: int,
+    tide_amount: int,
+    new_points: int,
     new_rank: str,
 ) -> None:
-    """Give tidepoints: +amount to Event Points AND Tidepoints; recompute rank."""
+    """
+    Give tidepoints under the per-rank points model: adds `tide_amount` to the
+    Tidepoints currency, SETS 'Event Points' to `new_points` (the in-rank
+    remainder the caller resolved after promotions), and sets the new rank.
+    """
     nc = get_client()
-    old_points = _get_number(current_props, "Event Points")
-    old_tide   = _get_number(current_props, "Tidepoints")
+    old_tide = _get_number(current_props, "Tidepoints")
     await nc.pages.update(
         page_id=page_id,
         properties={
-            "Event Points": _number(old_points + amount),
-            "Tidepoints":   _number(old_tide + amount),
+            "Event Points": _number(max(0, new_points)),
+            "Tidepoints":   _number(old_tide + tide_amount),
             "Rank":         _select(new_rank),
             "Days Served":  _number(days_served_value(current_props)),
         },
@@ -262,15 +296,18 @@ async def add_title_option(title: str) -> bool:
     return True
 
 
-async def set_member_company(page_id: str, company: str, rank: str) -> None:
+async def set_member_company(page_id: str, company: str, rank: str,
+                             reset_points: bool = False) -> None:
     nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Detachment": _select(company),
-            "Rank":       _select(rank),
-        },
-    )
+    props = {
+        "Detachment": _select(company),
+        "Rank":       _select(rank),
+    }
+    # Per-rank points: on placement (Levy → Soldier) the member starts their new
+    # rank fresh, so any points banked as an unsorted Levy are cleared.
+    if reset_points:
+        props["Event Points"] = _number(0)
+    await nc.pages.update(page_id=page_id, properties=props)
 
 
 async def archive_member(page_id: str, status: str) -> None:

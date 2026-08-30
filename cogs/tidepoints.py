@@ -11,7 +11,7 @@ import config
 import notion_service as ns
 import role_service
 import util
-from rank_engine import compute_rank, never_demote
+from rank_engine import apply_points
 
 
 def _highborn_check():
@@ -58,32 +58,27 @@ class TidepointsCog(commands.Cog):
         stats   = ns.extract_member_stats(props)
         company = stats["detachment"]
 
-        new_points = stats["points"] + amount
-        computed = compute_rank(
-            company, new_points,
-            combat_trainings=stats["combat_trainings"],
-            joints=stats["joints"],
-            prs=stats["prs"],
-            basic_levy=stats["basic_levy"],
-            tenure_days=ns.tenure_days(stats),
+        # Per-rank points: a grant adds to the member's in-rank points and can
+        # climb the auto ladder (Soldier→…→Man-at-Arms), carrying the remainder.
+        new_rank, new_points, promos = apply_points(
+            company, stats["rank"], stats["points"], amount, step=config.RANK_STEP,
         )
-        # Grandfather rule: the engine only ever promotes — a held rank is
-        # only removed manually.
-        new_rank = never_demote(company, stats["rank"], computed)
 
-        await ns.apply_tidepoints_grant(roster_page["id"], props, amount, new_rank)
+        await ns.apply_tidepoints_grant(
+            roster_page["id"], props, tide_amount=amount,
+            new_points=new_points, new_rank=new_rank,
+        )
 
-        if new_rank != stats["rank"]:
+        if promos:
             guild_member = interaction.guild.get_member(member.id)
             if guild_member:
                 await role_service.apply_rank_and_company(
                     guild_member, company, new_rank, old_rank=stats["rank"], lorename=stats["lorename"]
                 )
 
-        pts_label = config.POINTS_EMOJI or "pts"
         await interaction.followup.send(
             f"✅ Granted **{amount} tidepoints** to {member.mention}. Reason: *{reason}*"
-            + (f" → promoted to **{new_rank}**! 🎉" if new_rank != stats["rank"] else ""),
+            + (f" → promoted to **{new_rank}**! 🎉" if promos else ""),
             ephemeral=True,
         )
 

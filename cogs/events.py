@@ -22,7 +22,7 @@ import config
 import notion_service as ns
 import role_service
 import util
-from rank_engine import compute_rank, never_demote
+from rank_engine import apply_points
 from views.placement_panel import PlacementView
 
 log = logging.getLogger(__name__)
@@ -33,14 +33,6 @@ _HOUSE_WIDE = ["Stormbreakers", "Thunderhooves", "The Black Stags",
 
 # Attendee parsing: <@123>, <@!123>, or bare 17-20 digit IDs.
 _ID_RE = re.compile(r"<@!?(\d{17,20})>|\b(\d{17,20})\b")
-
-# Event-type counter keys for the rank recompute (mirrors config.EVENT_COUNTER_FIELDS).
-_COUNTER_KEYS = {
-    "House-wide Training": "combat_trainings",
-    "Retinue Training":    "combat_trainings",
-    "Joint Event":         "joints",
-    "PR":                  "prs",
-}
 
 
 class EventsCog(commands.Cog):
@@ -191,25 +183,18 @@ class EventsCog(commands.Cog):
                 stats = ns.extract_member_stats(props)
                 company = stats["detachment"]
 
-                # Recompute rank from the would-be totals (grandfather rule:
-                # the engine can only ever raise a rank).
-                counters = {
-                    "combat_trainings": stats["combat_trainings"],
-                    "joints":           stats["joints"],
-                    "prs":              stats["prs"],
-                }
-                if etype in _COUNTER_KEYS:
-                    counters[_COUNTER_KEYS[etype]] += 1
-                basic_levy = stats["basic_levy"] or etype == config.BASIC_LEVY_EVENT
-                computed = compute_rank(
-                    company, stats["points"] + points, basic_levy=basic_levy,
-                    tenure_days=ns.tenure_days(stats), **counters,
+                # Per-rank points: 'Event Points' is points earned SINCE the last
+                # promotion. Add this event's points; every RANK_STEP climbs one
+                # auto-ladder rank (Soldier→…→Man-at-Arms), carrying the remainder.
+                # Levy→Soldier is placement-driven (below), not points; manual and
+                # station ranks just bank points.
+                new_rank, new_points, promos = apply_points(
+                    company, stats["rank"], stats["points"], points,
+                    step=config.RANK_STEP,
                 )
-                new_rank = never_demote(company, stats["rank"], computed)
-
-                await ns.apply_approved_points(
+                await ns.apply_event_result(
                     page_id=page["id"], current_props=props,
-                    added_points=points, event_type=etype, new_rank=new_rank,
+                    new_points=new_points, event_type=etype, new_rank=new_rank,
                 )
                 await asyncio.sleep(0.34)
                 if request_id:  # best-effort paper trail in the Event Log DB
@@ -229,7 +214,7 @@ class EventsCog(commands.Cog):
                 # the host a placement control at the end.
                 if etype == config.BASIC_LEVY_EVENT and not company:
                     placement_candidates.append((str(uid), str(member)))
-                if new_rank != stats["rank"]:
+                if promos:
                     await role_service.apply_rank_and_company(
                         member, company, new_rank,
                         old_rank=stats["rank"], lorename=stats["lorename"],

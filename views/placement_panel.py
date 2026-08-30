@@ -90,7 +90,7 @@ class PlacementView(discord.ui.View):
             target = target or (pages[0] if pages else None)
             lorename = ns.extract_member_stats(target["properties"])["lorename"] if target else ""
             if target:
-                await ns.set_member_company(target["id"], det, "Soldier")
+                await ns.set_member_company(target["id"], det, "Soldier", reset_points=True)
             if member:
                 await role_service.apply_rank_and_company(
                     member, det, "Soldier", old_rank="Levy", lorename=lorename)

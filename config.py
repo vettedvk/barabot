@@ -376,13 +376,21 @@ SEPARATOR_TRIGGERS = {
 }
 
 # ── Event types and base point values ──────────────────────────────────────
+# Per-rank points model: promotion is 5 points earned SINCE the last promotion
+# (not a cumulative career total). Each ordinary event is 1 point; PRs are worth
+# 2 and PDs 3. Basic Levy Training is worth 0 — it is a placement trigger, not a
+# scoring event (it moves a Levy into a detachment as a Soldier by hand).
 EVENT_TYPES = {
     "Basic Levy Training": 0,
-    "House-wide Training": 5,
-    "Retinue Training":    5,
-    "Joint Event":         5,
-    "PR":                  5,
+    "House-wide Training": 1,
+    "Retinue Training":    1,
+    "Joint Event":         1,
+    "PR":                  2,
+    "PD":                  3,
 }
+
+# Points required to climb one rank on an auto ladder (Soldier → … → Man-at-Arms).
+RANK_STEP = 5
 
 # The event whose approval ticks the Basic Levy Training checkbox (and triggers
 # the post-training placement prompt).

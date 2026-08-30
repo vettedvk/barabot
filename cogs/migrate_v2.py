@@ -104,7 +104,10 @@ class MigrateV2Cog(commands.Cog):
                     lorename=identity["lorename"],
                     rank=rank,
                     status=status,
-                    points=max(r["points"] for r in rows),
+                    # Per-rank points model: 'Event Points' now means points earned
+                    # SINCE the last promotion, so everyone starts their current
+                    # rank fresh at 0 (career total is no longer tracked here).
+                    points=0,
                     tidepoints=max(r["tidepoints"] for r in rows),
                     combat_trainings=max(r["combat_trainings"] for r in rows),
                     joints=max(r["joints"] for r in rows),

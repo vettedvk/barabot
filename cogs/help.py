@@ -22,7 +22,7 @@ MEMBER_COMMANDS = [
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),
-    ("/myprogress", "See how close you are to your next rank (points/trainings/tenure needed)."),
+    ("/myprogress", "See how close you are to your next rank (event points earned toward the 5 needed)."),
     ("/help", "Show this command list."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
 ]
@@ -48,7 +48,7 @@ OFFICER_COMMANDS = [
 
 # Logging tier — the Court.
 LOGGER_COMMANDS = [
-    ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees and everyone gets points/attendance (and promotions) in Notion."),
+    ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees; each earns event points (1 normal / 2 PR / 3 PD) and promotes every 5 points. Basic Levy Training opens the placement prompt instead."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
     ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
     ("/edit_schedule", "Edit the current week's training schedule."),
