@@ -281,6 +281,121 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
     return summary
 
 
+async def reconcile_member(guild: discord.Guild, bot: discord.Client,
+                           member: discord.Member) -> dict:
+    """
+    Discord-authority upsert for ONE member — called from on_member_update when a
+    member's rank/detachment roles change. Discord is the source of truth for
+    rank and detachment: this makes the member's Notion rows match their current
+    roles.
+
+      • No roster entry at all → create one from their Discord ID (identity is
+        minimal — lorename from their nickname, blank Roblox — so the Saturday
+        missing-field sweep will prompt them to fill the rest in).
+      • Rank drifted on a detachment they still hold → update it (and announce a
+        genuine ladder promotion).
+      • A detachment they no longer hold a role for → archive that row.
+
+    Never DMs — bulk role changes shouldn't spam members; missing fields are
+    chased once a week by the Saturday sweep. Returns a small summary dict.
+    """
+    summary = {"created": 0, "rank_updated": 0, "archived": 0, "errors": 0}
+    uid = str(member.id)
+
+    desired = derive_detachment_rows(member, guild)
+    pages = await ns.get_members_by_discord_id(uid)
+    rows = [(p, ns.extract_member_stats(p["properties"])) for p in pages]
+
+    # No recognised roles held: don't touch anything. A fully-stripped role set
+    # is more likely a transient mid-edit state than an intentional wipe, and
+    # discharge has its own path. Leave existing rows for a human/the sweep.
+    if not desired:
+        return summary
+
+    desired_by_det = dict(desired)
+    existing_by_det: dict[str, list] = {}
+    for page, stats in rows:
+        existing_by_det.setdefault(stats["detachment"], []).append((page, stats))
+
+    if rows:
+        identity = rows[0][1]
+        enlisted = _enlist_date(rows[0][0]["properties"])
+        tidepoints_pool = identity["tidepoints"]
+    else:
+        # Brand-new manual entry: seed identity from Discord (blank Roblox — the
+        # Saturday sweep will ask the member to complete it).
+        identity = {
+            "roblox_username": "", "roblox_id": "",
+            "lorename": lorename_from_nick(member.nick) if member.nick else "",
+            "tidepoints": 0,
+        }
+        enlisted = None
+        tidepoints_pool = 0
+
+    try:
+        # 1) Archive rows for detachments the member no longer belongs to.
+        for det, plist in existing_by_det.items():
+            if det and det not in desired_by_det:
+                for page, _ in plist:
+                    await ns.archive_page(page["id"])
+                    summary["archived"] += 1
+                    await asyncio.sleep(0.34)
+
+        # 2) Ensure each desired detachment has one row at the right rank.
+        for det, rank in desired:
+            plist = existing_by_det.get(det)
+            if plist:
+                page, stats = plist[0]
+                # rank is None when Discord gives no rank role for this
+                # detachment — leave the manually-set Notion rank alone.
+                if rank is not None and stats["rank"] != rank:
+                    await ns.set_member_rank(page["id"], rank)
+                    await role_service.announce_promotion(member, rank, stats["rank"])
+                    summary["rank_updated"] += 1
+                    await asyncio.sleep(0.34)
+                continue
+
+            # Missing row — create it. Per-rank points model: a manually-ranked
+            # member starts their current rank fresh at 0 in-rank points.
+            create_rank = rank or STARTING_RANK.get(det, "Levy")
+            tp = 0
+            if det in _MAIN_DETACHMENTS and tidepoints_pool:
+                tp, tidepoints_pool = tidepoints_pool, 0
+            await ns.create_imported_member(
+                roblox_username=identity["roblox_username"],
+                roblox_id=identity["roblox_id"],
+                lorename=identity["lorename"],
+                discord_username=str(member),
+                discord_user_id=uid,
+                detachment=det,
+                rank=create_rank,
+                points=0,
+                tidepoints=tp,
+                basic_levy=(create_rank != "Levy"),
+                date_enlisted=enlisted,
+            )
+            summary["created"] += 1
+            await asyncio.sleep(0.34)
+
+        if summary["created"] or summary["rank_updated"] or summary["archived"]:
+            await audit_log.log_event(
+                bot, title="⚙️ Roster synced from Discord (live)", color=discord.Color.teal(),
+                fields=[
+                    ("Member", f"{member.mention} (`{member.id}`)", True),
+                    ("Now holds",
+                     (", ".join(f"{d} / {r or 'manual rank'}" for d, r in desired))[:1024], False),
+                    ("Changes",
+                     f"created {summary['created']}, rank {summary['rank_updated']}, "
+                     f"archived {summary['archived']}", True),
+                ],
+            )
+    except Exception as exc:
+        summary["errors"] += 1
+        log.error("reconcile_member: error for %s: %s", uid, exc)
+
+    return summary
+
+
 async def _log_abandoned(bot, uid: str, stats: dict, page_id: str) -> None:
     """Post the 'Member Missing From Server' embed for an abandoned post."""
     channel = bot.get_channel(config.CHANNEL_ABANDONMENT_LOG)

@@ -110,6 +110,7 @@ class BaratheonBot(commands.Bot):
             "cogs.events",
             "cogs.titles",
             "cogs.role_hygiene",
+            "cogs.discord_sync",
             "cogs.region",
             "cogs.migration",
             "cogs.migrate_v2",

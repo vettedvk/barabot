@@ -2,9 +2,38 @@
 Discord role service — translates rank/company names to role IDs and applies them.
 """
 
+import time
+
 import discord
 import config
 import notion_service as ns
+
+
+# ── Loop-guard for Discord-authority sync ────────────────────────────────────
+# When the BOT changes a member's roles (a promotion, a placement, a discharge),
+# Discord fires on_member_update — which the Discord→Notion authority listener
+# also watches. Notion is always written BEFORE the role edit, so a re-sync would
+# be a harmless no-op, but we still suppress it to avoid the redundant Notion
+# round-trip and any double promotion announcement. Callers that edit roles mark
+# the member here; the listener skips members marked within the window.
+_recent_bot_edits: dict[int, float] = {}
+_SUPPRESS_WINDOW_SECONDS = 30.0
+
+
+def mark_bot_edit(member_id: int) -> None:
+    """Record that the bot just edited this member's roles (loop-guard)."""
+    _recent_bot_edits[member_id] = time.monotonic()
+
+
+def was_bot_edit(member_id: int) -> bool:
+    """True if the bot edited this member's roles within the suppress window."""
+    ts = _recent_bot_edits.get(member_id)
+    if ts is None:
+        return False
+    if time.monotonic() - ts > _SUPPRESS_WINDOW_SECONDS:
+        _recent_bot_edits.pop(member_id, None)
+        return False
+    return True
 
 
 async def set_nickname(member: discord.Member, rank: str, lorename: str) -> None:
@@ -49,6 +78,7 @@ async def apply_rank_and_company(
     Returns {"added": [role names], "removed": [role names]} describing the
     actual change (both empty on a no-op), for audit logging by callers.
     """
+    mark_bot_edit(member.id)  # loop-guard: this is a bot-initiated role edit
     to_remove: list[discord.Role] = []
     to_add:    list[discord.Role] = []
 
@@ -174,6 +204,7 @@ async def announce_promotion(
 
 async def remove_all_rank_and_company_roles(member: discord.Member) -> None:
     """Strip all company and rank roles (used on discharge/abandonment)."""
+    mark_bot_edit(member.id)  # loop-guard: bot-initiated role edit
     to_remove: list[discord.Role] = []
     guild = member.guild
 
@@ -194,6 +225,7 @@ async def apply_discharge_roles(member: discord.Member, lorename: str | None = N
     Visitor. The member KEEPS Verified, and their nickname becomes just their
     lore name (no rank prefix). Best-effort — skips roles above the bot.
     """
+    mark_bot_edit(member.id)  # loop-guard: bot-initiated role edit
     guild = member.guild
     bot_top = guild.me.top_role
 

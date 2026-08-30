@@ -411,6 +411,12 @@ SYNC_INTERVAL_SECONDS = 600  # 10 minutes
 # through the restructure so it never auto-reconciles legacy roles mid-migration.
 SYNC_ENABLED = False
 
+# Live Discord-authority sync: when a member's rank/detachment roles change in
+# Discord, upsert their Notion entry immediately (on_member_update). This is the
+# "Discord at the centre" model — independent of the periodic bulk reconcile
+# above, which stays off during the migration.
+DISCORD_AUTHORITY_SYNC = True
+
 # ── Optional: custom points emoji ──────────────────────────────────────────
 POINTS_EMOJI = None
 
