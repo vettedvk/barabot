@@ -11,6 +11,7 @@ from typing import Optional
 from notion_client import AsyncClient
 
 import config
+import roster_cache
 
 
 _notion: Optional[AsyncClient] = None
@@ -71,6 +72,18 @@ def _roster_db() -> str:
     return os.environ["NOTION_ROSTER_DB_ID"]
 
 
+async def _update_and_invalidate(page_id: str, properties: dict, *, archived: bool | None = None) -> None:
+    """Write a roster page and drop it from the hot layer (write-through by
+    invalidation) so the next read refetches fresh from Notion. Every roster
+    write goes through here so no update path can leave the cache stale."""
+    nc = get_client()
+    kwargs: dict = {"page_id": page_id, "properties": properties}
+    if archived is not None:
+        kwargs["archived"] = archived
+    await nc.pages.update(**kwargs)
+    roster_cache.invalidate_page(page_id)
+
+
 # ── Roster helpers ─────────────────────────────────────────────────────────
 
 async def get_page(page_id: str) -> dict:
@@ -95,11 +108,33 @@ async def get_member_by_discord_id(discord_id: str) -> Optional[dict]:
 
 async def get_members_by_discord_id(discord_id: str) -> list[dict]:
     """Return ALL (non-archived) roster pages for a Discord ID — a member may
-    hold several (e.g. command staff across multiple detachments)."""
-    return await _query_all(
+    hold several (e.g. command staff across multiple detachments).
+
+    Served from the in-memory hot layer when warm; a miss (or a member with no
+    rows — empty results are never cached) falls through to Notion and warms it."""
+    uid = str(discord_id)
+    cached = roster_cache.get(uid)
+    if cached is not None:
+        return cached
+    pages = await _query_all(
         _roster_db(),
-        {"property": "Discord User ID", "rich_text": {"equals": str(discord_id)}},
+        {"property": "Discord User ID", "rich_text": {"equals": uid}},
     )
+    roster_cache.put(uid, pages)
+    return pages
+
+
+async def refresh_roster_cache() -> int:
+    """Rebuild the roster hot layer from a fresh Notion snapshot (all non-archived
+    rows, grouped by Discord ID). Picks up rows added/edited directly in Notion.
+    Returns the number of members cached."""
+    by_uid: dict[str, list[dict]] = {}
+    for page in await _query_all(_roster_db()):
+        uid = _get_text(page["properties"], "Discord User ID")
+        if uid:
+            by_uid.setdefault(uid, []).append(page)
+    roster_cache.replace_all(by_uid)
+    return len(by_uid)
 
 
 async def get_fleet_member_by_discord_id(discord_id: str) -> Optional[dict]:
@@ -152,8 +187,10 @@ async def create_member(
     }
     if detachment:
         props["Detachment"] = _select(detachment)
-    return await nc.pages.create(
+    page = await nc.pages.create(
         parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]}, properties=props)
+    roster_cache.invalidate_uid(str(discord_user_id))
+    return page
 
 
 async def apply_approved_points(
@@ -186,7 +223,7 @@ async def apply_approved_points(
             old_count = _get_number(current_props, counter_field)
             props[counter_field] = _number(old_count + 1)
 
-    await nc.pages.update(page_id=page_id, properties=props)
+    await _update_and_invalidate(page_id, props)
 
 
 async def apply_event_result(
@@ -216,7 +253,7 @@ async def apply_event_result(
         if counter_field:
             old_count = _get_number(current_props, counter_field)
             props[counter_field] = _number(old_count + 1)
-    await nc.pages.update(page_id=page_id, properties=props)
+    await _update_and_invalidate(page_id, props)
 
 
 async def apply_tidepoints_grant(
@@ -231,17 +268,13 @@ async def apply_tidepoints_grant(
     Tidepoints currency, SETS 'Event Points' to `new_points` (the in-rank
     remainder the caller resolved after promotions), and sets the new rank.
     """
-    nc = get_client()
     old_tide = _get_number(current_props, "Tidepoints")
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Event Points": _number(max(0, new_points)),
-            "Tidepoints":   _number(old_tide + tide_amount),
-            "Rank":         _select(new_rank),
-            "Days Served":  _number(days_served_value(current_props)),
-        },
-    )
+    await _update_and_invalidate(page_id, {
+        "Event Points": _number(max(0, new_points)),
+        "Tidepoints":   _number(old_tide + tide_amount),
+        "Rank":         _select(new_rank),
+        "Days Served":  _number(days_served_value(current_props)),
+    })
 
 
 async def apply_tidepoints_remove(
@@ -250,30 +283,24 @@ async def apply_tidepoints_remove(
     amount: int,
 ) -> None:
     """Remove tidepoints: -amount from Tidepoints only (floor 0). No rank change."""
-    nc = get_client()
     old_tide = _get_number(current_props, "Tidepoints")
     new_tide  = max(0, old_tide - amount)
-    await nc.pages.update(
-        page_id=page_id,
-        properties={"Tidepoints": _number(new_tide)},
-    )
+    await _update_and_invalidate(page_id, {"Tidepoints": _number(new_tide)})
 
 
 async def set_member_rank(page_id: str, rank: str) -> None:
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Rank": _select(rank)})
+    await _update_and_invalidate(page_id, {"Rank": _select(rank)})
 
 
 async def clear_member_rank(page_id: str) -> None:
     """Empty a roster row's Rank select — used when an admin confirms that a
     stale station rank (role no longer held in Discord) should be removed."""
-    await get_client().pages.update(page_id=page_id, properties={"Rank": {"select": None}})
+    await _update_and_invalidate(page_id, {"Rank": {"select": None}})
 
 
 async def set_member_title(page_id: str, title: str) -> None:
     """Set a council member's ceremonial Title (e.g. Lord Admiral) on their roster row."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Title": _select(title)})
+    await _update_and_invalidate(page_id, {"Title": _select(title)})
 
 
 async def add_title_option(title: str) -> bool:
@@ -298,7 +325,6 @@ async def add_title_option(title: str) -> bool:
 
 async def set_member_company(page_id: str, company: str, rank: str,
                              reset_points: bool = False) -> None:
-    nc = get_client()
     props = {
         "Detachment": _select(company),
         "Rank":       _select(rank),
@@ -307,17 +333,12 @@ async def set_member_company(page_id: str, company: str, rank: str,
     # rank fresh, so any points banked as an unsorted Levy are cleared.
     if reset_points:
         props["Event Points"] = _number(0)
-    await nc.pages.update(page_id=page_id, properties=props)
+    await _update_and_invalidate(page_id, props)
 
 
 async def archive_member(page_id: str, status: str) -> None:
     """Mark member Abandoned/Discharged and archive the Notion page."""
-    nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={"Status": _select(status)},
-        archived=True,
-    )
+    await _update_and_invalidate(page_id, {"Status": _select(status)}, archived=True)
 
 
 async def discharge_member(page_id: str) -> None:
@@ -330,14 +351,12 @@ async def set_member_status(page_id: str, status: str) -> None:
     (member goes on leave, then back to Active) — unlike archive_member, which
     is for permanent Discharged/Abandoned exits.
     """
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Status": _select(status)})
+    await _update_and_invalidate(page_id, {"Status": _select(status)})
 
 
 async def set_member_loa(page_id: str, until: date) -> None:
     """Put a roster row on LOA and stamp its auto-expiry date."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={
+    await _update_and_invalidate(page_id, {
         "Status": _select(config.LOA_STATUS),
         "LOA Until": {"date": {"start": until.isoformat()}},
     })
@@ -361,8 +380,7 @@ def member_loa_until(props: dict) -> Optional[date]:
 
 async def restore_member_from_loa(page_id: str) -> None:
     """Return a row to Active and clear its LOA expiry date."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={
+    await _update_and_invalidate(page_id, {
         "Status": _select("Active"),
         "LOA Until": {"date": None},
     })
@@ -392,7 +410,7 @@ async def reactivate_member(
         "Days Served":      _number(0),
     }
     props["Detachment"] = _select(detachment) if detachment else {"select": None}
-    await nc.pages.update(page_id=page_id, properties=props, archived=False)
+    await _update_and_invalidate(page_id, props, archived=False)
 
 
 async def get_all_active_members() -> list[dict]:
@@ -458,11 +476,13 @@ async def create_roster_v2_member(
     if date_enlisted:
         props["Date Enlisted"] = {"date": {"start": date_enlisted[:10]}}
     await nc.pages.create(parent={"database_id": db_id}, properties=props)
+    roster_cache.invalidate_uid(str(discord_user_id))
 
 
 async def archive_page(page_id: str) -> None:
     """Archive (trash) a Notion page without altering its properties."""
     await get_client().pages.update(page_id=page_id, archived=True)
+    roster_cache.invalidate_page(page_id)
 
 
 async def get_all_tracking_members() -> list[dict]:
@@ -486,7 +506,7 @@ async def update_roster_identity(
     if roblox_username is not None:
         props["Username"] = _title(roblox_username)
     if props:
-        await get_client().pages.update(page_id=page_id, properties=props)
+        await _update_and_invalidate(page_id, props)
 
 
 async def get_all_roster_discord_ids() -> set:
@@ -521,7 +541,7 @@ async def create_imported_member(
     """
     enlisted = date_enlisted or datetime.now(timezone.utc)
     nc = get_client()
-    return await nc.pages.create(
+    page = await nc.pages.create(
         parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]},
         properties={
             "Username":          _title(roblox_username),
@@ -543,6 +563,8 @@ async def create_imported_member(
             "Days Served":       _number(max(0, (datetime.now(timezone.utc).date() - enlisted.date()).days)),
         },
     )
+    roster_cache.invalidate_uid(str(discord_user_id))
+    return page
 
 
 # ── Event Log helpers ──────────────────────────────────────────────────────

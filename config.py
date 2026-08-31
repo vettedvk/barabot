@@ -417,6 +417,14 @@ SYNC_ENABLED = False
 # above, which stays off during the migration.
 DISCORD_AUTHORITY_SYNC = True
 
+# ── Roster hot layer (in-memory cache over Notion) ─────────────────────────
+# Notion stays the durable store; this caches per-member roster pages so repeat
+# reads don't re-hit Notion. Writes invalidate the affected member; a periodic
+# refresh reloads the whole roster so rows added/edited directly in Notion are
+# picked up. Kept safe by a short read TTL (roster_cache.TTL_SECONDS).
+ROSTER_CACHE_ENABLED = True
+ROSTER_CACHE_REFRESH_SECONDS = 180  # full refresh cadence (picks up manual Notion edits)
+
 # ── Optional: custom points emoji ──────────────────────────────────────────
 POINTS_EMOJI = None
 

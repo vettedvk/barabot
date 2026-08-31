@@ -114,6 +114,7 @@ class BaratheonBot(commands.Bot):
             "cogs.role_hygiene",
             "cogs.discord_sync",
             "cogs.profile_sweep",
+            "cogs.roster_cache_worker",
             "cogs.region",
             "cogs.migration",
             "cogs.migrate_v2",
