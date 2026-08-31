@@ -41,24 +41,16 @@ OFFICER_COMMANDS = [
     ("/strike [member] [reason]", "Issue a disciplinary strike (3 active → demote a rank, 5 → removal; strikes expire after 7 days)."),
     ("/strikes [member]", "View a member's active strikes."),
     ("/clear_strike [member]", "Clear a member's active strikes."),
-    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
-    ("/edit_schedule", "Edit the current week's training schedule."),
-    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Logging tier — the Court.
 LOGGER_COMMANDS = [
     ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees; each earns event points (1 normal / 2 PR / 3 PD) and promotes every 5 points. Basic Levy Training opens the placement prompt instead."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
-    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
-    ("/edit_schedule", "Edit the current week's training schedule."),
-    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Full-admin tier — every non-destructive command.
 ADMIN_COMMANDS = [
-    ("/give_tidepoints [member] [amount] [reason]", "Grant tidepoints (adds to Event Points AND Tidepoints, recomputes rank)."),
-    ("/remove_tidepoints [member] [amount] [reason]", "Remove tidepoints only (e.g. prize redemption). Does not change rank."),
     ("/create_council_title [name]", "Add a new ceremonial council title to the list."),
     ("/assign_council_title [member] [title]", "Give a council member a title (e.g. Lord Admiral)."),
     ("/relations", "Display House Baratheon's diplomatic relations."),

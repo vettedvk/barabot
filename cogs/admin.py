@@ -649,7 +649,6 @@ class AdminCog(commands.Cog):
             embed.add_field(name="Detachment",   value=stats["detachment"] or "—", inline=True)
             embed.add_field(name="Rank",         value=stats["rank"] or "—",       inline=True)
             embed.add_field(name="Event Points", value=str(stats["points"]),       inline=True)
-            embed.add_field(name="Tidepoints",   value=str(stats["tidepoints"]),   inline=True)
             embed.add_field(name="Status",       value=stats["status"] or "—",     inline=True)
             embed.add_field(
                 name="Attendance",

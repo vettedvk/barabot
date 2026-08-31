@@ -62,10 +62,6 @@ CHANNEL_DISCHARGE_PANEL  = 1512684353828683786
 CHANNEL_LOA_PANEL  = 1536688129220681830  # where the "Request LOA" button panel lives
 CHANNEL_LOA_REVIEW = 1536688227589685320  # where LOA requests post for approval
 
-# Weekly training schedule — the public embed the bot posts once and keeps
-# up to date in place. Wipes to a placeholder every Monday 00:00 UK time.
-CHANNEL_SCHEDULE = 1488659970198343757
-
 # Promotions — the bot congratulates + pings a member here whenever they climb
 # the auto ladder (Levy → … → Man-at-Arms). Doubles as a promotion log.
 CHANNEL_PROMOTIONS = 1537381403782811748

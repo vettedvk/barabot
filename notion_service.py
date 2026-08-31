@@ -140,10 +140,9 @@ async def refresh_roster_cache() -> int:
 async def get_fleet_member_by_discord_id(discord_id: str) -> Optional[dict]:
     """
     Return the member's MAIN-RETINUE roster row (Black Stags/Thunderhooves)
-    when they have one, else their first row, else None. Event points,
-    tidepoints, and the auto rank ladder all live on main-retinue rows, so
-    point-granting flows target this row — Stormguard/Knights/Court rows carry
-    manual ranks.
+    when they have one, else their first row, else None. Event points and the
+    auto rank ladder live on main-retinue rows, so point-granting flows target
+    this row — Stormguard/Knights/Court rows carry manual ranks.
     """
     pages = await get_members_by_discord_id(str(discord_id))
     if not pages:
@@ -175,7 +174,6 @@ async def create_member(
         "Discord User ID":   _text(str(discord_user_id)),
         "Rank":              _select(rank),
         "Event Points":      _number(0),
-        "Tidepoints":        _number(0),
         "Combat Trainings":  _number(0),
         "Joints":            _number(0),
         "Skirmishes":        _number(0),
@@ -254,38 +252,6 @@ async def apply_event_result(
             old_count = _get_number(current_props, counter_field)
             props[counter_field] = _number(old_count + 1)
     await _update_and_invalidate(page_id, props)
-
-
-async def apply_tidepoints_grant(
-    page_id: str,
-    current_props: dict,
-    tide_amount: int,
-    new_points: int,
-    new_rank: str,
-) -> None:
-    """
-    Give tidepoints under the per-rank points model: adds `tide_amount` to the
-    Tidepoints currency, SETS 'Event Points' to `new_points` (the in-rank
-    remainder the caller resolved after promotions), and sets the new rank.
-    """
-    old_tide = _get_number(current_props, "Tidepoints")
-    await _update_and_invalidate(page_id, {
-        "Event Points": _number(max(0, new_points)),
-        "Tidepoints":   _number(old_tide + tide_amount),
-        "Rank":         _select(new_rank),
-        "Days Served":  _number(days_served_value(current_props)),
-    })
-
-
-async def apply_tidepoints_remove(
-    page_id: str,
-    current_props: dict,
-    amount: int,
-) -> None:
-    """Remove tidepoints: -amount from Tidepoints only (floor 0). No rank change."""
-    old_tide = _get_number(current_props, "Tidepoints")
-    new_tide  = max(0, old_tide - amount)
-    await _update_and_invalidate(page_id, {"Tidepoints": _number(new_tide)})
 
 
 async def set_member_rank(page_id: str, rank: str) -> None:
@@ -399,7 +365,6 @@ async def reactivate_member(
         "Status":           _select("Active"),
         "Discord Username": _text(new_discord_username),
         "Event Points":     _number(0),
-        "Tidepoints":       _number(0),
         "Combat Trainings": _number(0),
         "Joints":           _number(0),
         "Skirmishes":       _number(0),
@@ -448,7 +413,7 @@ async def get_roster_v2_discord_ids() -> set[str]:
 async def create_roster_v2_member(
     *, roblox_username: str, roblox_id: str, discord_user_id: str,
     discord_username: str, lorename: str, rank: str, status: str,
-    points: int, tidepoints: int, combat_trainings: int, joints: int,
+    points: int, combat_trainings: int, joints: int,
     prs: int, skirmishes: int, days_served: int, date_enlisted: str,
     basic_levy: bool,
 ) -> None:
@@ -463,7 +428,6 @@ async def create_roster_v2_member(
         "Lorename":         _text(lorename or ""),
         "Status":           _select(status or "Active"),
         "Event Points":     _number(points),
-        "Tidepoints":       _number(tidepoints),
         "Combat Trainings": _number(combat_trainings),
         "Joints":           _number(joints),
         "PRs":              _number(prs),
@@ -524,7 +488,6 @@ async def create_imported_member(
     detachment: str,
     rank: str,
     points: int = 0,
-    tidepoints: int = 0,
     combat_trainings: int = 0,
     joints: int = 0,
     skirmishes: int = 0,
@@ -552,7 +515,6 @@ async def create_imported_member(
             "Detachment":        _select(detachment),
             "Rank":              _select(rank),
             "Event Points":      _number(points),
-            "Tidepoints":        _number(tidepoints),
             "Combat Trainings":  _number(combat_trainings),
             "Joints":            _number(joints),
             "Skirmishes":        _number(skirmishes),
@@ -768,43 +730,6 @@ async def log_advancement(
     )
 
 
-# ── Weekly Schedule helpers ────────────────────────────────────────────────
-# A single "current schedule" row stores the whole week as one JSON blob in a
-# "Data" rich-text column. Setup is minimal: one database with its default title
-# column + a text column named "Data". Best-effort — no DB id means no schedule.
-
-async def get_schedule_row() -> Optional[dict]:
-    """Return the singleton schedule row (or None if unset/empty)."""
-    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
-    if not db_id:
-        return None
-    rows = await _query_all(db_id)
-    return rows[0] if rows else None
-
-
-async def save_schedule_data(data_json: str) -> Optional[dict]:
-    """Upsert the singleton schedule row's Data blob (creates the row if absent)."""
-    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
-    if not db_id:
-        return None
-    nc = get_client()
-    row = await get_schedule_row()
-    if row:
-        await nc.pages.update(page_id=row["id"], properties={"Data": _text(data_json)})
-        return row
-    # First run: create the row. Detect the title property so we don't have to
-    # assume it's called "Name".
-    db = await nc.databases.retrieve(database_id=db_id)
-    title_name = next(
-        (n for n, p in db.get("properties", {}).items() if p.get("type") == "title"),
-        "Name",
-    )
-    return await nc.pages.create(
-        parent={"database_id": db_id},
-        properties={title_name: _title("Weekly Schedule"), "Data": _text(data_json)},
-    )
-
-
 # ── House Relations helpers ────────────────────────────────────────────────
 
 async def get_all_relations() -> list[dict]:
@@ -911,7 +836,6 @@ def extract_member_stats(props: dict) -> dict:
     """Pull all rank-relevant stats from a Notion properties dict."""
     return {
         "points":           _get_number(props, "Event Points"),
-        "tidepoints":       _get_number(props, "Tidepoints"),
         "combat_trainings": _get_number(props, "Combat Trainings"),
         "joints":           _get_number(props, "Joints"),
         "skirmishes":       _get_number(props, "Skirmishes"),  # legacy, no longer counted

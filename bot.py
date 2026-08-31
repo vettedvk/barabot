@@ -98,10 +98,8 @@ class BaratheonBot(commands.Bot):
         for cog in [
             "cogs.enlistment",
             "cogs.admin",
-            "cogs.tidepoints",
             "cogs.discharge",
             "cogs.loa",
-            "cogs.schedule",
             "cogs.recognition",
             "cogs.reports",
             "cogs.strikes",

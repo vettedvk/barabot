@@ -20,9 +20,9 @@ reconcile() therefore, per member:
   • absent from the guild  → archive ALL their active rows + log it (abandoned).
   • present                → make their set of active rows match the set of
     detachments/command implied by their roles: create missing rows (points
-    seeded to the rank's minimum so the points engine won't demote them;
-    tidepoints carried onto their main-detachment row), update a row whose rank
-    drifted, and archive rows for detachments they no longer belong to.
+    seeded to the rank's minimum so the points engine won't demote them),
+    update a row whose rank drifted, and archive rows for detachments they no
+    longer belong to.
 """
 
 import asyncio
@@ -56,7 +56,6 @@ _PRIORITY = {"Stormbreakers": 0, "Thunderhooves": 1, "Breaknecks": 2,
              "The Black Stags": 3, "Stormguard": 4, "Knights of the Storm": 5,
              "Court": 6, "High Command": 7}
 
-_MAIN_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks")
 _DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
                 "Stormguard", "Knights of the Storm", "Court")
 
@@ -195,7 +194,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
 
             identity = rows[0][1]
             enlisted = _enlist_date(rows[0][0]["properties"])
-            tidepoints_pool = identity["tidepoints"]  # carried once onto a main row
             changed = False
 
             # 0) Lorename check — the server nickname (minus any "{rank}, "
@@ -242,9 +240,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
                 # Fall back to the detachment's starting rank only on creation.
                 create_rank = rank or STARTING_RANK.get(det, "Levy")
                 seed = min_stats_for_rank(det, create_rank)
-                tp = 0
-                if det in _MAIN_DETACHMENTS and tidepoints_pool:
-                    tp, tidepoints_pool = tidepoints_pool, 0
                 await ns.create_imported_member(
                     roblox_username=identity["roblox_username"],
                     roblox_id=identity["roblox_id"],
@@ -254,7 +249,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
                     detachment=det,
                     rank=create_rank,
                     points=seed["points"],
-                    tidepoints=tp,
                     combat_trainings=seed["combat_trainings"],
                     joints=seed["joints"],
                     prs=seed["prs"],
@@ -320,17 +314,14 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
     if rows:
         identity = rows[0][1]
         enlisted = _enlist_date(rows[0][0]["properties"])
-        tidepoints_pool = identity["tidepoints"]
     else:
         # Brand-new manual entry: seed identity from Discord (blank Roblox — the
         # Saturday sweep will ask the member to complete it).
         identity = {
             "roblox_username": "", "roblox_id": "",
             "lorename": lorename_from_nick(member.nick) if member.nick else "",
-            "tidepoints": 0,
         }
         enlisted = None
-        tidepoints_pool = 0
 
     try:
         # 1) Archive rows for detachments the member no longer belongs to.
@@ -358,9 +349,6 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
             # Missing row — create it. Per-rank points model: a manually-ranked
             # member starts their current rank fresh at 0 in-rank points.
             create_rank = rank or STARTING_RANK.get(det, "Levy")
-            tp = 0
-            if det in _MAIN_DETACHMENTS and tidepoints_pool:
-                tp, tidepoints_pool = tidepoints_pool, 0
             await ns.create_imported_member(
                 roblox_username=identity["roblox_username"],
                 roblox_id=identity["roblox_id"],
@@ -370,7 +358,6 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
                 detachment=det,
                 rank=create_rank,
                 points=0,
-                tidepoints=tp,
                 basic_levy=(create_rank != "Levy"),
                 date_enlisted=enlisted,
             )
