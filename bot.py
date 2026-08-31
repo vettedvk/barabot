@@ -20,6 +20,8 @@ from views.loa_panel import LOAPanelView
 from views.self_update_panel import SelfUpdatePanelView
 from views.profile_completion_panel import ProfileCompletionView
 from views.enlistment_panel import EnlistmentPanelView
+from views.envoy_panel import EnvoyPanelView
+from views.court_panel import CourtPanelView
 from views.enlistment_review import EnlistmentReviewView, EnvoyReviewView
 from views.region_panel import RegionPanelView
 from views.trials_panel import TRIALS, TrialRequestView, TrialTicketCloseView
@@ -81,6 +83,8 @@ class BaratheonBot(commands.Bot):
 
         # Register persistent views so buttons survive restarts
         self.add_view(EnlistmentPanelView())
+        self.add_view(EnvoyPanelView())
+        self.add_view(CourtPanelView())
         self.add_view(EnlistmentReviewView())
         self.add_view(EnvoyReviewView())
         self.add_view(DischargeReviewView())
@@ -97,6 +101,7 @@ class BaratheonBot(commands.Bot):
         # Load cogs
         for cog in [
             "cogs.enlistment",
+            "cogs.envoys",
             "cogs.admin",
             "cogs.discharge",
             "cogs.loa",

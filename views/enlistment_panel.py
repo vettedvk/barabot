@@ -1,14 +1,14 @@
 """
-Enlistment panel — persistent message with three buttons:
-  • Begin Enlistment  -> region picker (EU/NA) -> modal -> review
-  • Court Application  -> court modal (+ written-test stub) -> review
-  • Envoy Application  -> diplomatic application modal -> review
+Enlistment panel — military entry only. One button:
+  • Begin Enlistment -> region picker (EU/NA) -> modal -> review
 
-New Levys are NO LONGER auto-sorted into a retinue — approval enlists them as an
-UNSORTED Levy, and they're placed into a detachment by hand after a Basic Levy
-Training (see cogs/events.py). Region (EU/NA) is still asked and granted as a
-blanket tag. All submissions post an embed with Accept/Decline to the enlistment
-review channel (config.CHANNEL_ENLISTMENT_REVIEW); a "Type" field routes approval.
+The modal collects Lore Name, Roblox Username, Roblox User ID, any past
+experience (optional), and the House Words. On approval the applicant enlists as
+an UNSORTED Levy in House Baratheon (see views/enlistment_review.py) and is
+placed into a detachment by hand after a Basic Levy Training (see cogs/events.py).
+
+Envoy and Court entry live on their own panels now (views/envoy_panel.py,
+views/court_panel.py).
 """
 
 import re
@@ -17,8 +17,8 @@ import discord
 
 import config
 import notion_service as ns
-from roblox import validate_roblox_user, fetch_roblox_by_id, RobloxValidationError
-from views.enlistment_review import EnlistmentReviewView, EnvoyReviewView
+from roblox import validate_roblox_user, RobloxValidationError
+from views.enlistment_review import EnlistmentReviewView
 
 
 # House Words the applicant must type (case/punctuation-insensitive).
@@ -31,20 +31,25 @@ def _words_match(value: str) -> bool:
 
 
 class EnlistModal(discord.ui.Modal, title="House Baratheon — Enlistment"):
-    roblox_id = discord.ui.TextInput(
-        label="Roblox ID",
-        placeholder="Your numeric Roblox ID (not a URL)",
-        max_length=20, required=True,
+    lorename = discord.ui.TextInput(
+        label="Lore Name",
+        placeholder="Your in-universe character name",
+        max_length=100, required=True,
     )
     roblox_username = discord.ui.TextInput(
         label="Roblox Username",
         placeholder="Your Roblox username (exact capitalisation)",
         max_length=50, required=True,
     )
-    lorename = discord.ui.TextInput(
-        label="Lore Name",
-        placeholder="Your in-universe character name",
-        max_length=100, required=True,
+    roblox_id = discord.ui.TextInput(
+        label="Roblox User ID",
+        placeholder="Your numeric Roblox ID (not a URL)",
+        max_length=20, required=True,
+    )
+    experience = discord.ui.TextInput(
+        label="Any past experience (optional)",
+        placeholder="Groups/genres you've been part of, roles held, etc.",
+        style=discord.TextStyle.paragraph, max_length=500, required=False,
     )
     house_words = discord.ui.TextInput(
         label="House Words",
@@ -84,6 +89,8 @@ class EnlistModal(discord.ui.Modal, title="House Baratheon — Enlistment"):
         embed.add_field(name="Roblox Username", value=roblox_data["name"], inline=True)
         embed.add_field(name="Roblox ID", value=str(roblox_data["id"]), inline=True)
         embed.add_field(name="Lore Name", value=self.lorename.value, inline=False)
+        embed.add_field(name="Past Experience",
+                        value=(self.experience.value or "—")[:1024], inline=False)
         embed.set_footer(text="Approving enlists them as an UNSORTED Levy — place them "
                               "into a retinue after their Basic Levy Training.")
 
@@ -114,140 +121,8 @@ class RegionChoiceView(discord.ui.View):
         return callback
 
 
-def _norm_gender(value: str) -> str | None:
-    v = (value or "").strip().lower()
-    if v in ("m", "male"):
-        return "M"
-    if v in ("f", "female"):
-        return "F"
-    return None
-
-
-class CourtIdentityModal(discord.ui.Modal, title="House Baratheon — Court Application"):
-    """Step 1: identity. Step 2 (the written test) follows via a button."""
-    roblox_id = discord.ui.TextInput(
-        label="Roblox ID", placeholder="Your numeric Roblox ID", max_length=20, required=True)
-    lorename = discord.ui.TextInput(
-        label="Lore Name", placeholder="Your in-universe character name", max_length=100, required=True)
-    gender = discord.ui.TextInput(
-        label="Lore Character Gender (M/F)", placeholder="M or F", max_length=6, required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        existing = await ns.get_member_by_discord_id(str(interaction.user.id))
-        if existing and ns.extract_member_stats(existing["properties"])["status"] == "Active":
-            await interaction.followup.send(
-                "❌ You're already in the roster! Contact an officer if this is an error.",
-                ephemeral=True)
-            return
-        gender = _norm_gender(self.gender.value)
-        if gender is None:
-            await interaction.followup.send(
-                "❌ Lore character gender must be **M** or **F**.", ephemeral=True)
-            return
-        try:
-            roblox_data = await fetch_roblox_by_id(self.roblox_id.value)
-        except RobloxValidationError as exc:
-            await interaction.followup.send(f"❌ {exc}", ephemeral=True)
-            return
-
-        questions = "\n".join(f"**{i + 1}.** {q}" for i, (_lbl, q) in enumerate(config.COURT_TEST_QUESTIONS))
-        await interaction.followup.send(
-            "⚖️ Identity confirmed. Read the questions below, then press **Begin Written Test**:\n\n"
-            + questions,
-            view=CourtTestButtonView(roblox_data["name"], str(roblox_data["id"]),
-                                     self.lorename.value, gender),
-            ephemeral=True)
-
-
-class CourtTestButtonView(discord.ui.View):
-    def __init__(self, roblox_name: str, roblox_id: str, lorename: str, gender: str):
-        super().__init__(timeout=600)
-        self.roblox_name = roblox_name
-        self.roblox_id = roblox_id
-        self.lorename = lorename
-        self.gender = gender
-
-    @discord.ui.button(label="Begin Written Test", style=discord.ButtonStyle.primary, emoji="📝")
-    async def begin(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(
-            CourtTestModal(self.roblox_name, self.roblox_id, self.lorename, self.gender))
-
-
-class CourtTestModal(discord.ui.Modal, title="Court — Written Test"):
-    def __init__(self, roblox_name: str, roblox_id: str, lorename: str, gender: str):
-        super().__init__()
-        self.roblox_name = roblox_name
-        self.roblox_id = roblox_id
-        self.lorename = lorename
-        self.gender = gender
-        self._inputs: list[discord.ui.TextInput] = []
-        for i, (label, question) in enumerate(config.COURT_TEST_QUESTIONS[:5]):
-            field = discord.ui.TextInput(
-                label=(label[:45] or f"Question {i + 1}"),
-                placeholder=question[:100],
-                style=discord.TextStyle.paragraph, max_length=500, required=True)
-            self._inputs.append(field)
-            self.add_item(field)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        embed = discord.Embed(title="⚖️ Court Application — Pending Review",
-                              color=discord.Color.purple())
-        embed.add_field(name="Type", value="Court", inline=True)
-        embed.add_field(name="Gender", value=self.gender, inline=True)
-        embed.add_field(name="Applicant",
-                        value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
-        embed.add_field(name="Roblox Username", value=self.roblox_name, inline=True)
-        embed.add_field(name="Roblox ID", value=self.roblox_id, inline=True)
-        embed.add_field(name="Lore Name", value=self.lorename, inline=False)
-        for (_label, question), field in zip(config.COURT_TEST_QUESTIONS, self._inputs):
-            embed.add_field(name=f"❓ {question[:250]}", value=(field.value or "—")[:1024], inline=False)
-        embed.set_footer(text="Approving grants Court entry (Clerk).")
-
-        review_channel = interaction.client.get_channel(config.CHANNEL_ENLISTMENT_REVIEW)
-        if review_channel is None:
-            await interaction.followup.send(
-                "❌ Review channel not found. Please contact an admin.", ephemeral=True)
-            return
-        await review_channel.send(embed=embed, view=EnlistmentReviewView())
-        await interaction.followup.send(
-            "⚖️ Your Court application and written test have been submitted for review.",
-            ephemeral=True)
-
-
-class EnvoyModal(discord.ui.Modal, title="House Baratheon — Envoy Application"):
-    roblox_username = discord.ui.TextInput(
-        label="Roblox Username", placeholder="Your Roblox username", max_length=50, required=True)
-    house = discord.ui.TextInput(
-        label="House / Group Represented",
-        placeholder="Which house or group are you representing?", max_length=100, required=True)
-    purpose = discord.ui.TextInput(
-        label="Purpose", placeholder="The purpose of your diplomatic visit / relations sought",
-        style=discord.TextStyle.paragraph, max_length=500, required=True)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        embed = discord.Embed(title="🕊️ Diplomatic Entry — Pending Review", color=discord.Color.teal())
-        embed.add_field(name="Applicant",
-                        value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
-        embed.add_field(name="Roblox Username", value=self.roblox_username.value, inline=True)
-        embed.add_field(name="House / Group", value=self.house.value, inline=True)
-        embed.add_field(name="Purpose", value=self.purpose.value, inline=False)
-        embed.set_footer(text="Approving grants the Envoy role.")
-
-        review_channel = interaction.client.get_channel(config.CHANNEL_ENLISTMENT_REVIEW)
-        if review_channel is None:
-            await interaction.followup.send(
-                "❌ Review channel not found. Please contact an admin.", ephemeral=True)
-            return
-        await review_channel.send(embed=embed, view=EnvoyReviewView())
-        await interaction.followup.send(
-            "🕊️ Your envoy application has been submitted. Be patient for review.", ephemeral=True)
-
-
 class EnlistmentPanelView(discord.ui.View):
-    """Persistent panel with the entry buttons."""
+    """Persistent panel with the military entry button."""
 
     def __init__(self):
         super().__init__(timeout=None)
@@ -258,13 +133,3 @@ class EnlistmentPanelView(discord.ui.View):
         await interaction.response.send_message(
             "🌍 Where are you based? (Region is a tag — you'll be sorted into a retinue "
             "after your Basic Levy Training.)", view=RegionChoiceView(), ephemeral=True)
-
-    @discord.ui.button(label="Court Application", style=discord.ButtonStyle.secondary,
-                       emoji="⚖️", custom_id="vel_court_apply")
-    async def court_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(CourtIdentityModal())
-
-    @discord.ui.button(label="Envoy Application", style=discord.ButtonStyle.secondary,
-                       custom_id="vel_envoy_apply")
-    async def envoy_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(EnvoyModal())

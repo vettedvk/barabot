@@ -252,6 +252,15 @@ COURT_TEST_QUESTIONS = [
      "administration for other groups/genres?"),
 ]
 
+# ── Envoys (diplomatic entry) ──────────────────────────────────────────────
+# Each envoy represents another house/allegiance. At most ENVOY_CAP active
+# envoys per house, EXCEPT the houses in ENVOY_EXEMPT_HOUSES (unlimited). Every
+# envoy is tracked in the Notion Envoys DB (env NOTION_ENVOY_DB_ID). House names
+# are matched case-insensitively with any leading "House " stripped, so "House
+# Stark", "stark" and "Stark" are the same house.
+ENVOY_CAP = 3
+ENVOY_EXEMPT_HOUSES = {"arryn"}  # normalized keys (lowercase, no "House " prefix)
+
 # Officer/manual ranks: never auto-promoted, protected from /purge auto-discharge.
 OFFICER_RANKS = (
     set(MILITARY_STATION_RANKS)

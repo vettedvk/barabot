@@ -3,6 +3,7 @@ Notion service — all Notion I/O goes through this module.
 Notion is the single source of truth.
 """
 
+import logging
 import os
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -13,6 +14,7 @@ from notion_client import AsyncClient
 import config
 import roster_cache
 
+log = logging.getLogger(__name__)
 
 _notion: Optional[AsyncClient] = None
 
@@ -162,6 +164,7 @@ async def create_member(
     discord_user_id: str,
     detachment: str = "",
     rank: str = "Levy",
+    region: str = "",
 ) -> dict:
     """Create a new roster page for a new enlistee (0 pts, starting rank Levy).
     A blank detachment means an unsorted Levy — placed after Basic Levy Training."""
@@ -185,6 +188,8 @@ async def create_member(
     }
     if detachment:
         props["Detachment"] = _select(detachment)
+    if region in config.REGION_ROLE_IDS:
+        props["Region"] = _select(region)
     page = await nc.pages.create(
         parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]}, properties=props)
     roster_cache.invalidate_uid(str(discord_user_id))
@@ -332,10 +337,10 @@ async def reactivate_member(
     new_discord_username: str,
     detachment: str = "",
     rank: str = "Levy",
+    region: str = "",
 ) -> None:
     """Unarchive and reset a prior member for re-enlistment. A blank detachment
     leaves them unsorted (placed after Basic Levy Training)."""
-    nc = get_client()
     props = {
         "Status":           _select("Active"),
         "Discord Username": _text(new_discord_username),
@@ -350,6 +355,8 @@ async def reactivate_member(
         "Days Served":      _number(0),
     }
     props["Detachment"] = _select(detachment) if detachment else {"select": None}
+    if region in config.REGION_ROLE_IDS:
+        props["Region"] = _select(region)
     await _update_and_invalidate(page_id, props, archived=False)
 
 
@@ -703,6 +710,84 @@ async def log_advancement(
             "Timestamp": _date(datetime.now(timezone.utc)),
         },
     )
+
+
+# ── Envoys ─────────────────────────────────────────────────────────────────
+# Every diplomatic envoy is a row in the Envoys DB (NOTION_ENVOY_DB_ID). Houses
+# are matched case-insensitively with any leading "House " stripped, so cap
+# counting is done in Python over the active rows rather than via Notion's
+# case-sensitive equals filter.
+
+def normalize_house(raw: str) -> tuple[str, str]:
+    """Return (display, key) for a house/allegiance. `display` trims and drops a
+    leading 'House ' prefix; `key` is its lowercase form for cap matching."""
+    s = (raw or "").strip()
+    if s.lower().startswith("house "):
+        s = s[6:].strip()
+    return s, s.lower()
+
+
+def _envoy_db() -> Optional[str]:
+    return os.environ.get("NOTION_ENVOY_DB_ID")
+
+
+async def get_active_envoys() -> list[dict]:
+    """Every active envoy row. Returns [] if the DB isn't configured OR can't be
+    read (e.g. not shared with the bot yet) so envoy applications never crash on
+    a misconfigured DB — the write path surfaces the real error to reviewers."""
+    db_id = _envoy_db()
+    if not db_id:
+        return []
+    try:
+        return await _query_all(db_id, {"property": "Status", "select": {"equals": "Active"}})
+    except Exception as exc:
+        log.warning("get_active_envoys: could not read Envoys DB: %s", exc)
+        return []
+
+
+async def count_active_envoys_by_house() -> dict[str, int]:
+    """Map normalized house key → number of active envoys (for the counts log)."""
+    counts: dict[str, int] = {}
+    for page in await get_active_envoys():
+        _disp, key = normalize_house(_get_text(page["properties"], "House"))
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+async def get_active_envoy_by_discord_id(discord_id: str) -> Optional[dict]:
+    """An applicant's existing active envoy row, if any (dupe guard)."""
+    for page in await get_active_envoys():
+        if _get_text(page["properties"], "Discord User ID") == str(discord_id):
+            return page
+    return None
+
+
+async def create_envoy(*, envoy_name: str, house_display: str, discord_user_id: str,
+                       discord_username: str, roblox_username: str, purpose: str) -> Optional[dict]:
+    """Add an active envoy row. Returns None if the Envoys DB isn't configured."""
+    db_id = _envoy_db()
+    if not db_id:
+        return None
+    return await get_client().pages.create(
+        parent={"database_id": db_id},
+        properties={
+            "Envoy":            _title(envoy_name or discord_username),
+            "House":            _text(house_display),
+            "Discord User ID":  _text(str(discord_user_id)),
+            "Discord Username": _text(discord_username),
+            "Roblox Username":  _text(roblox_username),
+            "Purpose":          _text(purpose),
+            "Status":           _select("Active"),
+            "Date":             _date(datetime.now(timezone.utc)),
+        },
+    )
+
+
+async def remove_envoy(page_id: str) -> None:
+    """Mark an envoy row Removed and archive it (frees their house's cap slot)."""
+    await get_client().pages.update(
+        page_id=page_id, properties={"Status": _select("Removed")}, archived=True)
 
 
 # ── Property helpers ───────────────────────────────────────────────────────

@@ -1027,6 +1027,14 @@ class AdminCog(commands.Cog):
             except Exception as exc:
                 log.error("force_discharge: failed to archive %s: %s", p.get("id"), exc)
 
+        # Free their envoy slot too (archive the Envoys-DB row) if they had one.
+        envoy_row = await ns.get_active_envoy_by_discord_id(str(member.id))
+        if envoy_row:
+            try:
+                await ns.remove_envoy(envoy_row["id"])
+            except Exception as exc:
+                log.error("force_discharge: failed to archive envoy row %s: %s", envoy_row.get("id"), exc)
+
         # Strips military roles + Envoy, grants Visitor (keeps Verified), and
         # drops the rank prefix from their nickname (lore name kept).
         await role_service.apply_discharge_roles(member, lorename=lorename)

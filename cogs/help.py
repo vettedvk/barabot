@@ -17,7 +17,9 @@ import util
 
 # (command, description) grouped by required permission tier
 MEMBER_COMMANDS = [
-    ("Enlistment panel", "Use **Begin Enlistment** (pick your region), **Court Application**, or **Envoy Application** to apply (reviewed). Recruits are placed into a retinue after their Basic Levy Training."),
+    ("Enlistment panel", "Press **Begin Enlistment**, pick your region, and fill in the form (Lore Name, Roblox details, past experience, House Words). Approved recruits join as a Levy and are placed into a retinue after their Basic Levy Training."),
+    ("Envoy panel", "Representing another house/allegiance? Press **Envoy Application** and name a real GoT house or allegiance (reviewed; capped at 3 envoys per house)."),
+    ("Court panel", "Press **Court Application** to confirm your identity and sit the written test (reviewed; approved applicants join the Court as a Clerk)."),
     ("Region panel", "Press **Set My Region** to tag yourself EU or NA (your retinue is assigned after your Basic Levy Training)."),
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
@@ -32,6 +34,8 @@ OFFICER_COMMANDS = [
     ("/event [detachment] [title]", "Announce an event — DMs everyone in that retinue, or House-wide in one go."),
     ("/force_enlist [member] [fleet] [as_envoy] …", "Manually enlist a member — military (retinue/Levy) or, with as_envoy, as a diplomatic Envoy."),
     ("/force_discharge [member]", "Manually discharge an enlisted member or envoy (archives all Notion rows, strips roles, grants Visitor)."),
+    ("/envoys", "Show active envoy counts per house (the diplomatic log)."),
+    ("/remove_envoy [member]", "Remove an envoy — archive their Envoys-DB record (freeing a house slot) and strip the Envoy role."),
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
     ("/sync", "Full manual reconcile of Discord roles into Notion (detachments, ranks, abandoned posts). Role changes already sync automatically — this is the catch-up pass."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
@@ -51,7 +55,9 @@ ADMIN_COMMANDS = [
     ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant; requests open private ticket channels)."),
     ("/setup_region_panel", "Post the persistent 'Set My Region' retinue-sorting panel in the current channel."),
     ("/self_update", "Post the 'Update Roblox Info' self-service panel (members fill in their own Roblox ID/username; auto-saved, no review)."),
-    ("/setup_enlist_panel", "Post the enlistment / diplomatic entry panel in its channel."),
+    ("/setup_enlist_panel", "Post the military enlistment panel in its channel."),
+    ("/setup_envoy_panel", "Post the Envoy (diplomatic entry) panel in the current channel."),
+    ("/setup_court_panel", "Post the Court of Storm's End application panel in the current channel."),
     ("/setup_discharge_panel", "Post the persistent Discharge Request panel in its channel."),
     ("/setup_loa_panel", "Post the persistent LOA (Leave of Absence) request panel in its channel."),
     ("/missingnotionrole", "List military members who are not in the Notion roster."),
