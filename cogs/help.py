@@ -17,12 +17,14 @@ import util
 
 # (command, description) grouped by required permission tier
 MEMBER_COMMANDS = [
-    ("Enlistment panel", "Use **Begin Enlistment** (pick your region → retinue) or **Envoy Application** on the enlistment panel to apply (officer-reviewed)."),
-    ("Region panel", "Press **Set My Region** to be auto-sorted into your retinue (EU & Middle East → Black Stags, NA → Thunderhooves, Asia → your choice)."),
+    ("Enlistment panel", "Press **Begin Enlistment**, pick your region, and fill in the form (Lore Name, Roblox details, past experience, House Words). Approved recruits join as a Levy and are placed into a retinue after their Basic Levy Training."),
+    ("Envoy panel", "Representing another house/allegiance? Press **Envoy Application** and name a real GoT house or allegiance (reviewed; capped at 3 envoys per house)."),
+    ("Court panel", "Press **Court Application** to confirm your identity and sit the written test (reviewed; approved applicants join the Court as a Clerk)."),
+    ("Region panel", "Press **Set My Region** to tag yourself EU or NA (your retinue is assigned after your Basic Levy Training)."),
     ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
     ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
     ("/roster [member]", "View a roster record. Defaults to yourself."),
-    ("/myprogress", "See how close you are to your next rank (points/trainings/tenure needed)."),
+    ("/myprogress", "See how close you are to your next rank (event points earned toward the 5 needed)."),
     ("/help", "Show this command list."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
 ]
@@ -30,43 +32,32 @@ MEMBER_COMMANDS = [
 # Officer tier — Military Command access roles (and above).
 OFFICER_COMMANDS = [
     ("/event [detachment] [title]", "Announce an event — DMs everyone in that retinue, or House-wide in one go."),
-    ("/set_rank [member] [rank]", "Manually set a member's rank (manual ladders + leadership appointments)."),
-    ("/move_detachment [member] [company] [rank]", "Move a member to a different detachment, optionally setting their rank in the same command."),
     ("/force_enlist [member] [fleet] [as_envoy] …", "Manually enlist a member — military (retinue/Levy) or, with as_envoy, as a diplomatic Envoy."),
     ("/force_discharge [member]", "Manually discharge an enlisted member or envoy (archives all Notion rows, strips roles, grants Visitor)."),
-    ("/add_roster_entry [member] [detachment] [rank] …", "Add a Notion roster entry only (no Discord roles). Copies Roblox/lore from the member's existing entry."),
+    ("/envoys", "Show active envoy counts per house (the diplomatic log)."),
+    ("/remove_envoy [member]", "Remove an envoy — archive their Envoys-DB record (freeing a house slot) and strip the Envoy role."),
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
-    ("/sync", "Reconcile manual Discord role changes into Notion (transfers detachments, updates ranks, logs abandoned posts)."),
+    ("/sync", "Full manual reconcile of Discord roles into Notion (detachments, ranks, abandoned posts). Role changes already sync automatically — this is the catch-up pass."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
     ("/strike [member] [reason]", "Issue a disciplinary strike (3 active → demote a rank, 5 → removal; strikes expire after 7 days)."),
     ("/strikes [member]", "View a member's active strikes."),
     ("/clear_strike [member]", "Clear a member's active strikes."),
-    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
-    ("/edit_schedule", "Edit the current week's training schedule."),
-    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Logging tier — the Court.
 LOGGER_COMMANDS = [
-    ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees and everyone gets points/attendance (and promotions) in Notion."),
+    ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees; each earns event points (1 normal / 2 PR / 3 PD) and promotes every 5 points. Basic Levy Training opens the placement prompt instead."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
-    ("/create_schedule", "Open the weekly training schedule builder (also edits the current week). Post button publishes it; edits then apply live."),
-    ("/edit_schedule", "Edit the current week's training schedule."),
-    ("/post_schedule", "Post or refresh the public weekly schedule embed (normally automatic)."),
 ]
 
 # Full-admin tier — every non-destructive command.
 ADMIN_COMMANDS = [
-    ("/give_tidepoints [member] [amount] [reason]", "Grant tidepoints (adds to Event Points AND Tidepoints, recomputes rank)."),
-    ("/remove_tidepoints [member] [amount] [reason]", "Remove tidepoints only (e.g. prize redemption). Does not change rank."),
-    ("/create_council_title [name]", "Add a new ceremonial council title to the list."),
-    ("/assign_council_title [member] [title]", "Give a council member a title (e.g. Lord Admiral)."),
-    ("/relations", "Display House Baratheon's diplomatic relations."),
-    ("/relations_set [house] [status]", "Set or add a house's diplomatic status."),
     ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant; requests open private ticket channels)."),
     ("/setup_region_panel", "Post the persistent 'Set My Region' retinue-sorting panel in the current channel."),
     ("/self_update", "Post the 'Update Roblox Info' self-service panel (members fill in their own Roblox ID/username; auto-saved, no review)."),
-    ("/setup_enlist_panel", "Post the enlistment / diplomatic entry panel in its channel."),
+    ("/setup_enlist_panel", "Post the military enlistment panel in its channel."),
+    ("/setup_envoy_panel", "Post the Envoy (diplomatic entry) panel in the current channel."),
+    ("/setup_court_panel", "Post the Court of Storm's End application panel in the current channel."),
     ("/setup_discharge_panel", "Post the persistent Discharge Request panel in its channel."),
     ("/setup_loa_panel", "Post the persistent LOA (Leave of Absence) request panel in its channel."),
     ("/missingnotionrole", "List military members who are not in the Notion roster."),
@@ -79,8 +70,12 @@ RULER_COMMANDS = [
     ("/clear_roster", "DANGER: archive every row in the Notion roster (for a clean re-import). Asks for confirmation."),
     ("/import_roster [dry_run]", "Bulk-import members from their Discord roles into Notion, seeding rank-appropriate points (preview first)."),
     ("/migrate_roster [dry_run]", "Match roster lorenames to the tracking DB and backfill Roblox IDs/usernames (preview first)."),
-    ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports knightless officers and retinue conflicts. Preview first."),
+    ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports retinue conflicts. Preview first."),
+    ("/migrate_roster_v2", "One-off: copy every member from the legacy roster into the new Roster V2, unsorted (no detachment)."),
+    ("/apply_roster_roles [member] [dry_run]", "Sync Discord roles from the roster — strip legacy roles and apply each member's rank/detachment. Preview first."),
     ("/toggle_sync", "Turn the periodic Discord→Notion sync on/off at runtime."),
+    ("/run_profile_sweep [dry_run]", "Run the weekly missing-field sweep now — DM members with blank roster fields; unreachable/blank-ID rows are reported to the house lead. Preview first."),
+    ("/roster_cache [action]", "Inspect, refresh, or toggle the in-memory roster cache (status / refresh / on / off)."),
     ("/undo_role_changes [hours] [dry_run]", "Reverse the bot's own role changes over the last N hours (incident recovery; preview first)."),
 ]
 

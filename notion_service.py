@@ -3,6 +3,7 @@ Notion service — all Notion I/O goes through this module.
 Notion is the single source of truth.
 """
 
+import logging
 import os
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -11,7 +12,9 @@ from typing import Optional
 from notion_client import AsyncClient
 
 import config
+import roster_cache
 
+log = logging.getLogger(__name__)
 
 _notion: Optional[AsyncClient] = None
 
@@ -71,6 +74,18 @@ def _roster_db() -> str:
     return os.environ["NOTION_ROSTER_DB_ID"]
 
 
+async def _update_and_invalidate(page_id: str, properties: dict, *, archived: bool | None = None) -> None:
+    """Write a roster page and drop it from the hot layer (write-through by
+    invalidation) so the next read refetches fresh from Notion. Every roster
+    write goes through here so no update path can leave the cache stale."""
+    nc = get_client()
+    kwargs: dict = {"page_id": page_id, "properties": properties}
+    if archived is not None:
+        kwargs["archived"] = archived
+    await nc.pages.update(**kwargs)
+    roster_cache.invalidate_page(page_id)
+
+
 # ── Roster helpers ─────────────────────────────────────────────────────────
 
 async def get_page(page_id: str) -> dict:
@@ -95,27 +110,48 @@ async def get_member_by_discord_id(discord_id: str) -> Optional[dict]:
 
 async def get_members_by_discord_id(discord_id: str) -> list[dict]:
     """Return ALL (non-archived) roster pages for a Discord ID — a member may
-    hold several (e.g. command staff across multiple detachments)."""
-    return await _query_all(
+    hold several (e.g. command staff across multiple detachments).
+
+    Served from the in-memory hot layer when warm; a miss (or a member with no
+    rows — empty results are never cached) falls through to Notion and warms it."""
+    uid = str(discord_id)
+    cached = roster_cache.get(uid)
+    if cached is not None:
+        return cached
+    pages = await _query_all(
         _roster_db(),
-        {"property": "Discord User ID", "rich_text": {"equals": str(discord_id)}},
+        {"property": "Discord User ID", "rich_text": {"equals": uid}},
     )
+    roster_cache.put(uid, pages)
+    return pages
+
+
+async def refresh_roster_cache() -> int:
+    """Rebuild the roster hot layer from a fresh Notion snapshot (all non-archived
+    rows, grouped by Discord ID). Picks up rows added/edited directly in Notion.
+    Returns the number of members cached."""
+    by_uid: dict[str, list[dict]] = {}
+    for page in await _query_all(_roster_db()):
+        uid = _get_text(page["properties"], "Discord User ID")
+        if uid:
+            by_uid.setdefault(uid, []).append(page)
+    roster_cache.replace_all(by_uid)
+    return len(by_uid)
 
 
 async def get_fleet_member_by_discord_id(discord_id: str) -> Optional[dict]:
     """
     Return the member's MAIN-RETINUE roster row (Black Stags/Thunderhooves)
-    when they have one, else their first row, else None. Event points,
-    tidepoints, and the auto rank ladder all live on main-retinue rows, so
-    point-granting flows target this row — Stormguard/Knights/Court rows carry
-    manual ranks.
+    when they have one, else their first row, else None. Event points and the
+    auto rank ladder live on main-retinue rows, so point-granting flows target
+    this row — Stormguard/Knights/Court rows carry manual ranks.
     """
     pages = await get_members_by_discord_id(str(discord_id))
     if not pages:
         return None
     for page in pages:
         det = ((page["properties"].get("Detachment", {}) or {}).get("select") or {}).get("name", "")
-        if det in ("Black Stags", "Thunderhooves"):
+        if det in config.MAIN_COMBAT_DETACHMENTS:
             return page
     return pages[0]
 
@@ -126,33 +162,37 @@ async def create_member(
     lorename: str,
     discord_username: str,
     discord_user_id: str,
-    detachment: str = "Black Stags",
+    detachment: str = "",
     rank: str = "Levy",
+    region: str = "",
 ) -> dict:
-    """Create a new roster page for a new enlistee (0 pts, starting rank Levy)."""
+    """Create a new roster page for a new enlistee (0 pts, starting rank Levy).
+    A blank detachment means an unsorted Levy — placed after Basic Levy Training."""
     nc = get_client()
+    props = {
+        "Username":          _title(roblox_username),
+        "Roblox ID":         _text(roblox_id),
+        "Lorename":          _text(lorename),
+        "Discord Username":  _text(discord_username),
+        "Discord User ID":   _text(str(discord_user_id)),
+        "Rank":              _select(rank),
+        "Event Points":      _number(0),
+        "Combat Trainings":  _number(0),
+        "Joints":            _number(0),
+        "Skirmishes":        _number(0),
+        "PRs":               _number(0),
+        "Status":            _select("Active"),
+        "Date Enlisted":     _date(datetime.now(timezone.utc)),
+        config.BASIC_LEVY_FIELD: _checkbox(False),
+        "Days Served":       _number(0),
+    }
+    if detachment:
+        props["Detachment"] = _select(detachment)
+    if region in config.REGION_ROLE_IDS:
+        props["Region"] = _select(region)
     page = await nc.pages.create(
-        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]},
-        properties={
-            "Username":          _title(roblox_username),
-            "Roblox ID":         _text(roblox_id),
-            "Lorename":          _text(lorename),
-            "Discord Username":  _text(discord_username),
-            "Discord User ID":   _text(str(discord_user_id)),
-            "Detachment":        _select(detachment),
-            "Rank":              _select(rank),
-            "Event Points":      _number(0),
-            "Tidepoints":        _number(0),
-            "Combat Trainings":  _number(0),
-            "Joints":            _number(0),
-            "Skirmishes":        _number(0),
-            "PRs":               _number(0),
-            "Status":            _select("Active"),
-            "Date Enlisted":     _date(datetime.now(timezone.utc)),
-            config.BASIC_LEVY_FIELD: _checkbox(False),
-            "Days Served":       _number(0),
-        },
-    )
+        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]}, properties=props)
+    roster_cache.invalidate_uid(str(discord_user_id))
     return page
 
 
@@ -186,101 +226,65 @@ async def apply_approved_points(
             old_count = _get_number(current_props, counter_field)
             props[counter_field] = _number(old_count + 1)
 
-    await nc.pages.update(page_id=page_id, properties=props)
+    await _update_and_invalidate(page_id, props)
 
 
-async def apply_tidepoints_grant(
+async def apply_event_result(
     page_id: str,
     current_props: dict,
-    amount: int,
+    new_points: int,
+    event_type: str,
     new_rank: str,
 ) -> None:
-    """Give tidepoints: +amount to Event Points AND Tidepoints; recompute rank."""
+    """
+    Per-rank points model. Unlike apply_approved_points (which ADDED to a
+    cumulative career total), this SETS 'Event Points' to `new_points` — the
+    in-rank remainder after any promotions the caller already resolved — and
+    sets the (possibly promoted) rank. Still increments the attendance counter
+    (or ticks the Basic Levy Training checkbox) and refreshes Days Served.
+    """
     nc = get_client()
-    old_points = _get_number(current_props, "Event Points")
-    old_tide   = _get_number(current_props, "Tidepoints")
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Event Points": _number(old_points + amount),
-            "Tidepoints":   _number(old_tide + amount),
-            "Rank":         _select(new_rank),
-            "Days Served":  _number(days_served_value(current_props)),
-        },
-    )
-
-
-async def apply_tidepoints_remove(
-    page_id: str,
-    current_props: dict,
-    amount: int,
-) -> None:
-    """Remove tidepoints: -amount from Tidepoints only (floor 0). No rank change."""
-    nc = get_client()
-    old_tide = _get_number(current_props, "Tidepoints")
-    new_tide  = max(0, old_tide - amount)
-    await nc.pages.update(
-        page_id=page_id,
-        properties={"Tidepoints": _number(new_tide)},
-    )
+    props: dict = {
+        "Event Points": _number(max(0, new_points)),
+        "Rank":         _select(new_rank),
+        "Days Served":  _number(days_served_value(current_props)),
+    }
+    if event_type == config.BASIC_LEVY_EVENT:
+        props[config.BASIC_LEVY_FIELD] = _checkbox(True)
+    else:
+        counter_field = config.EVENT_COUNTER_FIELDS.get(event_type)
+        if counter_field:
+            old_count = _get_number(current_props, counter_field)
+            props[counter_field] = _number(old_count + 1)
+    await _update_and_invalidate(page_id, props)
 
 
 async def set_member_rank(page_id: str, rank: str) -> None:
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Rank": _select(rank)})
+    await _update_and_invalidate(page_id, {"Rank": _select(rank)})
 
 
 async def clear_member_rank(page_id: str) -> None:
     """Empty a roster row's Rank select — used when an admin confirms that a
     stale station rank (role no longer held in Discord) should be removed."""
-    await get_client().pages.update(page_id=page_id, properties={"Rank": {"select": None}})
+    await _update_and_invalidate(page_id, {"Rank": {"select": None}})
 
 
-async def set_member_title(page_id: str, title: str) -> None:
-    """Set a council member's ceremonial Title (e.g. Lord Admiral) on their roster row."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Title": _select(title)})
-
-
-async def add_title_option(title: str) -> bool:
-    """
-    Add a new option to the roster's 'Title' select property. Returns False if it
-    already exists. Used by /create_council_title so titles can be added at runtime.
-    """
-    nc = get_client()
-    db = await nc.databases.retrieve(database_id=_roster_db())
-    prop = db.get("properties", {}).get("Title", {}) or {}
-    options = [{"name": o["name"]} for o in (prop.get("select", {}) or {}).get("options", [])]
-    if any(o["name"].lower() == title.lower() for o in options):
-        return False
-    options.append({"name": title})
-    await nc.databases.update(
-        database_id=_roster_db(),
-        properties={"Title": {"select": {"options": options}}},
-    )
-    _schema_cache.pop("Title", None)  # bust the cached option list
-    return True
-
-
-async def set_member_company(page_id: str, company: str, rank: str) -> None:
-    nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Detachment": _select(company),
-            "Rank":       _select(rank),
-        },
-    )
+async def set_member_company(page_id: str, company: str, rank: str,
+                             reset_points: bool = False) -> None:
+    props = {
+        "Detachment": _select(company),
+        "Rank":       _select(rank),
+    }
+    # Per-rank points: on placement (Levy → Soldier) the member starts their new
+    # rank fresh, so any points banked as an unsorted Levy are cleared.
+    if reset_points:
+        props["Event Points"] = _number(0)
+    await _update_and_invalidate(page_id, props)
 
 
 async def archive_member(page_id: str, status: str) -> None:
     """Mark member Abandoned/Discharged and archive the Notion page."""
-    nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={"Status": _select(status)},
-        archived=True,
-    )
+    await _update_and_invalidate(page_id, {"Status": _select(status)}, archived=True)
 
 
 async def discharge_member(page_id: str) -> None:
@@ -293,14 +297,12 @@ async def set_member_status(page_id: str, status: str) -> None:
     (member goes on leave, then back to Active) — unlike archive_member, which
     is for permanent Discharged/Abandoned exits.
     """
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={"Status": _select(status)})
+    await _update_and_invalidate(page_id, {"Status": _select(status)})
 
 
 async def set_member_loa(page_id: str, until: date) -> None:
     """Put a roster row on LOA and stamp its auto-expiry date."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={
+    await _update_and_invalidate(page_id, {
         "Status": _select(config.LOA_STATUS),
         "LOA Until": {"date": {"start": until.isoformat()}},
     })
@@ -324,8 +326,7 @@ def member_loa_until(props: dict) -> Optional[date]:
 
 async def restore_member_from_loa(page_id: str) -> None:
     """Return a row to Active and clear its LOA expiry date."""
-    nc = get_client()
-    await nc.pages.update(page_id=page_id, properties={
+    await _update_and_invalidate(page_id, {
         "Status": _select("Active"),
         "LOA Until": {"date": None},
     })
@@ -334,30 +335,29 @@ async def restore_member_from_loa(page_id: str) -> None:
 async def reactivate_member(
     page_id: str,
     new_discord_username: str,
-    detachment: str = "Black Stags",
+    detachment: str = "",
     rank: str = "Levy",
+    region: str = "",
 ) -> None:
-    """Unarchive and reset a prior member for re-enlistment."""
-    nc = get_client()
-    await nc.pages.update(
-        page_id=page_id,
-        properties={
-            "Status":           _select("Active"),
-            "Discord Username": _text(new_discord_username),
-            "Event Points":     _number(0),
-            "Tidepoints":       _number(0),
-            "Combat Trainings": _number(0),
-            "Joints":           _number(0),
-            "Skirmishes":       _number(0),
-            "PRs":              _number(0),
-            "Rank":             _select(rank),
-            "Detachment":       _select(detachment),
-            "Date Enlisted":    _date(datetime.now(timezone.utc)),
-            config.BASIC_LEVY_FIELD: _checkbox(False),
-            "Days Served":      _number(0),
-        },
-        archived=False,
-    )
+    """Unarchive and reset a prior member for re-enlistment. A blank detachment
+    leaves them unsorted (placed after Basic Levy Training)."""
+    props = {
+        "Status":           _select("Active"),
+        "Discord Username": _text(new_discord_username),
+        "Event Points":     _number(0),
+        "Combat Trainings": _number(0),
+        "Joints":           _number(0),
+        "Skirmishes":       _number(0),
+        "PRs":              _number(0),
+        "Rank":             _select(rank),
+        "Date Enlisted":    _date(datetime.now(timezone.utc)),
+        config.BASIC_LEVY_FIELD: _checkbox(False),
+        "Days Served":      _number(0),
+    }
+    props["Detachment"] = _select(detachment) if detachment else {"select": None}
+    if region in config.REGION_ROLE_IDS:
+        props["Region"] = _select(region)
+    await _update_and_invalidate(page_id, props, archived=False)
 
 
 async def get_all_active_members() -> list[dict]:
@@ -370,9 +370,65 @@ async def get_all_roster_pages() -> list[dict]:
     return await _query_all(_roster_db())
 
 
+# ── Roster V2 migration (new combat-role structure) ─────────────────────────
+# One-off: copy the LEGACY roster (NOTION_ROSTER_LEGACY_DB_ID) into the now-active
+# roster (NOTION_ROSTER_DB_ID = V2), one row per member, WITHOUT a detachment.
+
+async def get_legacy_roster_pages() -> list[dict]:
+    """Every non-archived page in the legacy roster (migration source)."""
+    db_id = os.environ.get("NOTION_ROSTER_LEGACY_DB_ID")
+    if not db_id:
+        return []
+    return await _query_all(db_id)
+
+
+async def get_roster_v2_discord_ids() -> set[str]:
+    """Discord IDs already present in the active (V2) roster."""
+    ids = set()
+    for page in await _query_all(_roster_db()):
+        uid = _get_text(page["properties"], "Discord User ID")
+        if uid:
+            ids.add(uid)
+    return ids
+
+
+async def create_roster_v2_member(
+    *, roblox_username: str, roblox_id: str, discord_user_id: str,
+    discord_username: str, lorename: str, rank: str, status: str,
+    points: int, combat_trainings: int, joints: int,
+    prs: int, skirmishes: int, days_served: int, date_enlisted: str,
+    basic_levy: bool,
+) -> None:
+    """Create one UNSORTED member row (no Detachment) in the active roster."""
+    db_id = _roster_db()
+    nc = get_client()
+    props = {
+        "Username":         _title(roblox_username or ""),
+        "Roblox ID":        _text(roblox_id or ""),
+        "Discord User ID":  _text(discord_user_id),
+        "Discord Username": _text(discord_username or ""),
+        "Lorename":         _text(lorename or ""),
+        "Status":           _select(status or "Active"),
+        "Event Points":     _number(points),
+        "Combat Trainings": _number(combat_trainings),
+        "Joints":           _number(joints),
+        "PRs":              _number(prs),
+        "Skirmishes":       _number(skirmishes),
+        "Days Served":      _number(days_served),
+        "Basic Levy Training": _checkbox(basic_levy),
+    }
+    if rank:
+        props["Rank"] = _select(rank)
+    if date_enlisted:
+        props["Date Enlisted"] = {"date": {"start": date_enlisted[:10]}}
+    await nc.pages.create(parent={"database_id": db_id}, properties=props)
+    roster_cache.invalidate_uid(str(discord_user_id))
+
+
 async def archive_page(page_id: str) -> None:
     """Archive (trash) a Notion page without altering its properties."""
     await get_client().pages.update(page_id=page_id, archived=True)
+    roster_cache.invalidate_page(page_id)
 
 
 async def get_all_tracking_members() -> list[dict]:
@@ -396,7 +452,7 @@ async def update_roster_identity(
     if roblox_username is not None:
         props["Username"] = _title(roblox_username)
     if props:
-        await get_client().pages.update(page_id=page_id, properties=props)
+        await _update_and_invalidate(page_id, props)
 
 
 async def get_all_roster_discord_ids() -> set:
@@ -414,7 +470,6 @@ async def create_imported_member(
     detachment: str,
     rank: str,
     points: int = 0,
-    tidepoints: int = 0,
     combat_trainings: int = 0,
     joints: int = 0,
     skirmishes: int = 0,
@@ -431,7 +486,7 @@ async def create_imported_member(
     """
     enlisted = date_enlisted or datetime.now(timezone.utc)
     nc = get_client()
-    return await nc.pages.create(
+    page = await nc.pages.create(
         parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]},
         properties={
             "Username":          _title(roblox_username),
@@ -442,7 +497,6 @@ async def create_imported_member(
             "Detachment":        _select(detachment),
             "Rank":              _select(rank),
             "Event Points":      _number(points),
-            "Tidepoints":        _number(tidepoints),
             "Combat Trainings":  _number(combat_trainings),
             "Joints":            _number(joints),
             "Skirmishes":        _number(skirmishes),
@@ -453,6 +507,8 @@ async def create_imported_member(
             "Days Served":       _number(max(0, (datetime.now(timezone.utc).date() - enlisted.date()).days)),
         },
     )
+    roster_cache.invalidate_uid(str(discord_user_id))
+    return page
 
 
 # ── Event Log helpers ──────────────────────────────────────────────────────
@@ -656,90 +712,82 @@ async def log_advancement(
     )
 
 
-# ── Weekly Schedule helpers ────────────────────────────────────────────────
-# A single "current schedule" row stores the whole week as one JSON blob in a
-# "Data" rich-text column. Setup is minimal: one database with its default title
-# column + a text column named "Data". Best-effort — no DB id means no schedule.
+# ── Envoys ─────────────────────────────────────────────────────────────────
+# Every diplomatic envoy is a row in the Envoys DB (NOTION_ENVOY_DB_ID). Houses
+# are matched case-insensitively with any leading "House " stripped, so cap
+# counting is done in Python over the active rows rather than via Notion's
+# case-sensitive equals filter.
 
-async def get_schedule_row() -> Optional[dict]:
-    """Return the singleton schedule row (or None if unset/empty)."""
-    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
+def normalize_house(raw: str) -> tuple[str, str]:
+    """Return (display, key) for a house/allegiance. `display` trims and drops a
+    leading 'House ' prefix; `key` is its lowercase form for cap matching."""
+    s = (raw or "").strip()
+    if s.lower().startswith("house "):
+        s = s[6:].strip()
+    return s, s.lower()
+
+
+def _envoy_db() -> Optional[str]:
+    return os.environ.get("NOTION_ENVOY_DB_ID")
+
+
+async def get_active_envoys() -> list[dict]:
+    """Every active envoy row. Returns [] if the DB isn't configured OR can't be
+    read (e.g. not shared with the bot yet) so envoy applications never crash on
+    a misconfigured DB — the write path surfaces the real error to reviewers."""
+    db_id = _envoy_db()
+    if not db_id:
+        return []
+    try:
+        return await _query_all(db_id, {"property": "Status", "select": {"equals": "Active"}})
+    except Exception as exc:
+        log.warning("get_active_envoys: could not read Envoys DB: %s", exc)
+        return []
+
+
+async def count_active_envoys_by_house() -> dict[str, int]:
+    """Map normalized house key → number of active envoys (for the counts log)."""
+    counts: dict[str, int] = {}
+    for page in await get_active_envoys():
+        _disp, key = normalize_house(_get_text(page["properties"], "House"))
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+async def get_active_envoy_by_discord_id(discord_id: str) -> Optional[dict]:
+    """An applicant's existing active envoy row, if any (dupe guard)."""
+    for page in await get_active_envoys():
+        if _get_text(page["properties"], "Discord User ID") == str(discord_id):
+            return page
+    return None
+
+
+async def create_envoy(*, envoy_name: str, house_display: str, discord_user_id: str,
+                       discord_username: str, roblox_username: str, purpose: str) -> Optional[dict]:
+    """Add an active envoy row. Returns None if the Envoys DB isn't configured."""
+    db_id = _envoy_db()
     if not db_id:
         return None
-    rows = await _query_all(db_id)
-    return rows[0] if rows else None
-
-
-async def save_schedule_data(data_json: str) -> Optional[dict]:
-    """Upsert the singleton schedule row's Data blob (creates the row if absent)."""
-    db_id = os.environ.get("NOTION_SCHEDULE_DB_ID")
-    if not db_id:
-        return None
-    nc = get_client()
-    row = await get_schedule_row()
-    if row:
-        await nc.pages.update(page_id=row["id"], properties={"Data": _text(data_json)})
-        return row
-    # First run: create the row. Detect the title property so we don't have to
-    # assume it's called "Name".
-    db = await nc.databases.retrieve(database_id=db_id)
-    title_name = next(
-        (n for n, p in db.get("properties", {}).items() if p.get("type") == "title"),
-        "Name",
-    )
-    return await nc.pages.create(
+    return await get_client().pages.create(
         parent={"database_id": db_id},
-        properties={title_name: _title("Weekly Schedule"), "Data": _text(data_json)},
-    )
-
-
-# ── House Relations helpers ────────────────────────────────────────────────
-
-async def get_all_relations() -> list[dict]:
-    """Return every house relation as {house, region, status, order, page_id}."""
-    pages = await _query_all(config.NOTION_RELATIONS_DB_ID)
-    out: list[dict] = []
-    for page in pages:
-        p = page["properties"]
-        out.append({
-            "page_id": page["id"],
-            "house":   _get_title(p, "House"),
-            "region":  ((p.get("Region", {}) or {}).get("select") or {}).get("name", ""),
-            "status":  ((p.get("Status", {}) or {}).get("select") or {}).get("name", ""),
-            "order":   (p.get("Order", {}) or {}).get("number"),
-        })
-    return out
-
-
-async def set_relation(house: str, status: str, region: Optional[str] = None) -> str:
-    """Update a house's status (and region if given), or create it. Returns 'updated'/'created'."""
-    nc = get_client()
-    resp = await nc.databases.query(
-        database_id=config.NOTION_RELATIONS_DB_ID,
-        filter={"property": "House", "title": {"equals": house}},
-    )
-    results = resp.get("results", [])
-    if results:
-        props = {"Status": _select(status)}
-        if region:
-            props["Region"] = _select(region)
-        await nc.pages.update(page_id=results[0]["id"], properties=props)
-        return "updated"
-
-    if not region:
-        raise ValueError("Region is required to add a new house.")
-    existing = await get_all_relations()
-    next_order = max([r["order"] for r in existing if r["order"] is not None], default=0) + 1
-    await nc.pages.create(
-        parent={"database_id": config.NOTION_RELATIONS_DB_ID},
         properties={
-            "House":  _title(house),
-            "Region": _select(region),
-            "Status": _select(status),
-            "Order":  _number(next_order),
+            "Envoy":            _title(envoy_name or discord_username),
+            "House":            _text(house_display),
+            "Discord User ID":  _text(str(discord_user_id)),
+            "Discord Username": _text(discord_username),
+            "Roblox Username":  _text(roblox_username),
+            "Purpose":          _text(purpose),
+            "Status":           _select("Active"),
+            "Date":             _date(datetime.now(timezone.utc)),
         },
     )
-    return "created"
+
+
+async def remove_envoy(page_id: str) -> None:
+    """Mark an envoy row Removed and archive it (frees their house's cap slot)."""
+    await get_client().pages.update(
+        page_id=page_id, properties={"Status": _select("Removed")}, archived=True)
 
 
 # ── Property helpers ───────────────────────────────────────────────────────
@@ -799,7 +847,6 @@ def extract_member_stats(props: dict) -> dict:
     """Pull all rank-relevant stats from a Notion properties dict."""
     return {
         "points":           _get_number(props, "Event Points"),
-        "tidepoints":       _get_number(props, "Tidepoints"),
         "combat_trainings": _get_number(props, "Combat Trainings"),
         "joints":           _get_number(props, "Joints"),
         "skirmishes":       _get_number(props, "Skirmishes"),  # legacy, no longer counted
@@ -808,7 +855,6 @@ def extract_member_stats(props: dict) -> dict:
         "rank":             (((props.get("Rank") or {}).get("select")) or {}).get("name", ""),
         "detachment":       (((props.get("Detachment") or {}).get("select")) or {}).get("name", ""),
         "status":           (((props.get("Status") or {}).get("select")) or {}).get("name", ""),
-        "title":            ((props.get("Title", {}) or {}).get("select") or {}).get("name", ""),
         "discord_user_id":  _get_text(props, "Discord User ID"),
         "discord_username": _get_text(props, "Discord Username"),
         "lorename":         _get_text(props, "Lorename"),

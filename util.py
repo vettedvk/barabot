@@ -49,11 +49,6 @@ def is_admin(user: discord.abc.User) -> bool:
     return has_any_role(user, config.ADMIN_ROLE_IDS)
 
 
-def is_highborn(user: discord.abc.User) -> bool:
-    """Kept for the tidepoint commands, which now sit in the full-admin tier."""
-    return is_admin(user)
-
-
 def is_reviewer(user: discord.abc.User) -> bool:
     """Command staff who may approve enlistment / envoy / introduction requests."""
     return has_any_role(user, config.ENLISTMENT_REVIEWER_ROLE_IDS | config.ADMIN_ROLE_IDS)
@@ -78,14 +73,6 @@ def is_loa_reviewer(member: discord.Member) -> bool:
     Who may approve/deny LOA requests: Bot Admins, Military Command officers, and
     the Court. is_officer and is_event_logger each already layer ADMIN on, so
     their union covers all three tiers.
-    """
-    return is_officer(member) or is_event_logger(member)
-
-
-def is_schedule_manager(member: discord.Member) -> bool:
-    """
-    Who may build/edit/post the weekly training schedule: Bot Admins, Military
-    Command officers, and the Court — same tier as LOA review.
     """
     return is_officer(member) or is_event_logger(member)
 

@@ -50,13 +50,8 @@ log = logging.getLogger(__name__)
 _LADDER_IDS = set(config.FLEET_RANK_ROLE_IDS)
 _STATION_IDS = set(config.STATION_ROLE_IDS)
 _COURT_STATION_IDS = set(config.COURT_STATION_ROLE_IDS)
-_MAIN_RETINUE_IDS = {
-    config.COMPANY_ROLE_IDS["Black Stags"],
-    config.COMPANY_ROLE_IDS["Thunderhooves"],
-}
-_KNIGHT_ID = config.RANK_ROLE_IDS["Knight"]
+_MAIN_RETINUE_IDS = {config.COMPANY_ROLE_IDS[d] for d in config.MAIN_COMBAT_DETACHMENTS}
 _STORMGUARD_ID = config.COMPANY_ROLE_IDS["Stormguard"]
-_MIL_STATION_IDS = {config.RANK_ROLE_IDS[r] for r in config.MILITARY_STATION_RANKS}
 
 
 def compute_changes(member: discord.Member) -> tuple[set[int], set[int], list[str]]:
@@ -87,18 +82,12 @@ def compute_changes(member: discord.Member) -> tuple[set[int], set[int], list[st
     elif config.ROLE_STATION in ids:
         remove.add(config.ROLE_STATION)
 
-    # ── Report-only: only knights may be (military) officers ──
-    if ids & _MIL_STATION_IDS and _KNIGHT_ID not in ids and _STORMGUARD_ID not in ids:
-        notes.append("holds an officer station without the Knight rank")
-
     # ── Report-only: retinue conflicts ──
     mains = ids & _MAIN_RETINUE_IDS
     if len(mains) > 1:
-        notes.append("in BOTH main retinues")
+        notes.append("in more than one main combat retinue")
     if _STORMGUARD_ID in ids and mains:
-        notes.append("in the Stormguard AND a main retinue")
-    if config.ROLE_COURT in ((ids - remove) | add) and mains:
-        notes.append("in the Court AND a main retinue")
+        notes.append("in the Stormguard AND a main combat retinue")
 
     # ── Rule 3: separators derive from the post-change role set ──
     effective = (ids - remove) | add
@@ -108,10 +97,6 @@ def compute_changes(member: discord.Member) -> tuple[set[int], set[int], list[st
                 add.add(sep_id)
         elif sep_id in ids:
             remove.add(sep_id)
-
-    # Util separator: everyone has it.
-    if config.SEPARATOR_UTIL not in ids:
-        add.add(config.SEPARATOR_UTIL)
 
     return add, remove, notes
 

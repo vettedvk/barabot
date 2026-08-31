@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 _COOLDOWN_SECONDS = 3600
 _last_request: dict[tuple[int, str], float] = {}
 
-_MAIN_RETINUES = ("Black Stags", "Thunderhooves")
+_MAIN_RETINUES = tuple(config.MAIN_COMBAT_DETACHMENTS)
 
 
 # ── Trial definitions (handbook) ────────────────────────────────────────────

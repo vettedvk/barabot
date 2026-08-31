@@ -11,8 +11,7 @@ Model (Option A — one roster row per thing a member belongs to):
     Storm members keep their main retinue, so two rows is their norm;
     Stormguard and Court members hold only their own row.
   • Command members (Council of Storm's End and ABOVE) additionally get a
-    "High Command" row carrying their council rank (their ceremonial Title is
-    set separately via /assign_council_title and is never touched here).
+    "High Command" row carrying their council rank.
   • Officers (Corporal and above) are manually ranked and don't earn points —
     the sync still mirrors their rank from Discord, it just never recomputes it.
 
@@ -20,9 +19,9 @@ reconcile() therefore, per member:
   • absent from the guild  → archive ALL their active rows + log it (abandoned).
   • present                → make their set of active rows match the set of
     detachments/command implied by their roles: create missing rows (points
-    seeded to the rank's minimum so the points engine won't demote them;
-    tidepoints carried onto their main-detachment row), update a row whose rank
-    drifted, and archive rows for detachments they no longer belong to.
+    seeded to the rank's minimum so the points engine won't demote them),
+    update a row whose rank drifted, and archive rows for detachments they no
+    longer belong to.
 """
 
 import asyncio
@@ -41,8 +40,10 @@ log = logging.getLogger(__name__)
 
 # Rank assigned when a member holds a detachment role but no rank role within it.
 STARTING_RANK = {
-    "Black Stags":          "Levy",
+    "Stormbreakers":        "Levy",
     "Thunderhooves":        "Levy",
+    "Breaknecks":           "Levy",
+    "The Black Stags":      "Knight Banneret",
     "Stormguard":           "Squire",
     "Knights of the Storm": "Squire",
     "Court":                "Clerk",
@@ -50,12 +51,12 @@ STARTING_RANK = {
 }
 
 # Order used when one "primary" detachment must be picked (import / display).
-# The Stormguard outranks the Knights of the Storm.
-_PRIORITY = {"Black Stags": 0, "Thunderhooves": 1, "Stormguard": 2,
-             "Knights of the Storm": 3, "Court": 4, "High Command": 5}
+_PRIORITY = {"Stormbreakers": 0, "Thunderhooves": 1, "Breaknecks": 2,
+             "The Black Stags": 3, "Stormguard": 4, "Knights of the Storm": 5,
+             "Court": 6, "High Command": 7}
 
-_MAIN_DETACHMENTS = ("Black Stags", "Thunderhooves")
-_DETACHMENTS = ("Black Stags", "Thunderhooves", "Stormguard", "Knights of the Storm", "Court")
+_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+                "Stormguard", "Knights of the Storm", "Court")
 
 
 def lorename_from_nick(nick: str) -> str:
@@ -136,7 +137,7 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
     summary["stale_station"] lists members whose Notion row still carries a
     station/court rank whose Discord role they no longer hold — sync
     deliberately never clobbers manual ranks, so these need a human decision
-    (/set_rank, a Discord rank role, or a hand edit in Notion)."""
+    (change the Discord rank role, or a hand edit in Notion)."""
     summary = {"created": 0, "rank_updated": 0, "archived": 0, "abandoned": 0,
                "skipped": 0, "errors": 0, "lorename_updated": 0, "stale_station": []}
 
@@ -192,7 +193,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
 
             identity = rows[0][1]
             enlisted = _enlist_date(rows[0][0]["properties"])
-            tidepoints_pool = identity["tidepoints"]  # carried once onto a main row
             changed = False
 
             # 0) Lorename check — the server nickname (minus any "{rank}, "
@@ -239,9 +239,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
                 # Fall back to the detachment's starting rank only on creation.
                 create_rank = rank or STARTING_RANK.get(det, "Levy")
                 seed = min_stats_for_rank(det, create_rank)
-                tp = 0
-                if det in _MAIN_DETACHMENTS and tidepoints_pool:
-                    tp, tidepoints_pool = tidepoints_pool, 0
                 await ns.create_imported_member(
                     roblox_username=identity["roblox_username"],
                     roblox_id=identity["roblox_id"],
@@ -251,7 +248,6 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
                     detachment=det,
                     rank=create_rank,
                     points=seed["points"],
-                    tidepoints=tp,
                     combat_trainings=seed["combat_trainings"],
                     joints=seed["joints"],
                     prs=seed["prs"],
@@ -274,6 +270,114 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
         except Exception as exc:
             summary["errors"] += 1
             log.error("reconcile: error for uid %s: %s", uid, exc)
+
+    return summary
+
+
+async def reconcile_member(guild: discord.Guild, bot: discord.Client,
+                           member: discord.Member) -> dict:
+    """
+    Discord-authority upsert for ONE member — called from on_member_update when a
+    member's rank/detachment roles change. Discord is the source of truth for
+    rank and detachment: this makes the member's Notion rows match their current
+    roles.
+
+      • No roster entry at all → create one from their Discord ID (identity is
+        minimal — lorename from their nickname, blank Roblox — so the Saturday
+        missing-field sweep will prompt them to fill the rest in).
+      • Rank drifted on a detachment they still hold → update it (and announce a
+        genuine ladder promotion).
+      • A detachment they no longer hold a role for → archive that row.
+
+    Never DMs — bulk role changes shouldn't spam members; missing fields are
+    chased once a week by the Saturday sweep. Returns a small summary dict.
+    """
+    summary = {"created": 0, "rank_updated": 0, "archived": 0, "errors": 0}
+    uid = str(member.id)
+
+    desired = derive_detachment_rows(member, guild)
+    pages = await ns.get_members_by_discord_id(uid)
+    rows = [(p, ns.extract_member_stats(p["properties"])) for p in pages]
+
+    # No recognised roles held: don't touch anything. A fully-stripped role set
+    # is more likely a transient mid-edit state than an intentional wipe, and
+    # discharge has its own path. Leave existing rows for a human/the sweep.
+    if not desired:
+        return summary
+
+    desired_by_det = dict(desired)
+    existing_by_det: dict[str, list] = {}
+    for page, stats in rows:
+        existing_by_det.setdefault(stats["detachment"], []).append((page, stats))
+
+    if rows:
+        identity = rows[0][1]
+        enlisted = _enlist_date(rows[0][0]["properties"])
+    else:
+        # Brand-new manual entry: seed identity from Discord (blank Roblox — the
+        # Saturday sweep will ask the member to complete it).
+        identity = {
+            "roblox_username": "", "roblox_id": "",
+            "lorename": lorename_from_nick(member.nick) if member.nick else "",
+        }
+        enlisted = None
+
+    try:
+        # 1) Archive rows for detachments the member no longer belongs to.
+        for det, plist in existing_by_det.items():
+            if det and det not in desired_by_det:
+                for page, _ in plist:
+                    await ns.archive_page(page["id"])
+                    summary["archived"] += 1
+                    await asyncio.sleep(0.34)
+
+        # 2) Ensure each desired detachment has one row at the right rank.
+        for det, rank in desired:
+            plist = existing_by_det.get(det)
+            if plist:
+                page, stats = plist[0]
+                # rank is None when Discord gives no rank role for this
+                # detachment — leave the manually-set Notion rank alone.
+                if rank is not None and stats["rank"] != rank:
+                    await ns.set_member_rank(page["id"], rank)
+                    await role_service.announce_promotion(member, rank, stats["rank"])
+                    summary["rank_updated"] += 1
+                    await asyncio.sleep(0.34)
+                continue
+
+            # Missing row — create it. Per-rank points model: a manually-ranked
+            # member starts their current rank fresh at 0 in-rank points.
+            create_rank = rank or STARTING_RANK.get(det, "Levy")
+            await ns.create_imported_member(
+                roblox_username=identity["roblox_username"],
+                roblox_id=identity["roblox_id"],
+                lorename=identity["lorename"],
+                discord_username=str(member),
+                discord_user_id=uid,
+                detachment=det,
+                rank=create_rank,
+                points=0,
+                basic_levy=(create_rank != "Levy"),
+                date_enlisted=enlisted,
+            )
+            summary["created"] += 1
+            await asyncio.sleep(0.34)
+
+        if summary["created"] or summary["rank_updated"] or summary["archived"]:
+            await audit_log.log_event(
+                bot, title="⚙️ Roster synced from Discord (live)", color=discord.Color.teal(),
+                fields=[
+                    ("Member", f"{member.mention} (`{member.id}`)", True),
+                    ("Now holds",
+                     (", ".join(f"{d} / {r or 'manual rank'}" for d, r in desired))[:1024], False),
+                    ("Changes",
+                     f"created {summary['created']}, rank {summary['rank_updated']}, "
+                     f"archived {summary['archived']}", True),
+                ],
+            )
+    except Exception as exc:
+        summary["errors"] += 1
+        log.error("reconcile_member: error for %s: %s", uid, exc)
 
     return summary
 

@@ -19,7 +19,7 @@ from discord.ext import commands, tasks
 import config
 import notion_service as ns
 import util
-from rank_engine import next_rank_progress
+from rank_engine import AUTO_LADDERS
 
 log = logging.getLogger(__name__)
 
@@ -64,41 +64,49 @@ class RecognitionCog(commands.Cog):
         page = await ns.get_fleet_member_by_discord_id(str(target.id))
         if page is None:
             await interaction.followup.send(
-                "❌ No retinue roster record found — this only applies to Black Stags "
-                "and Thunderhooves members on the points ladder.", ephemeral=True)
+                "❌ No retinue roster record found — this only applies to main combat "
+                "retinue members on the points ladder.", ephemeral=True)
             return
 
         stats = ns.extract_member_stats(page["properties"])
-        progress = next_rank_progress(
-            stats["detachment"], stats["rank"], stats["points"],
-            combat_trainings=stats["combat_trainings"], joints=stats["joints"],
-            prs=stats["prs"], basic_levy=stats["basic_levy"],
-            tenure_days=ns.tenure_days(stats),
-        )
+        company, rank, pts = stats["detachment"], stats["rank"], stats["points"]
+        ladder = AUTO_LADDERS.get(company)
 
         who = "You are" if target == interaction.user else f"{target.mention} is"
-        if progress is None:
+
+        # Appointed ranks (stations, Court, specialised, High Command) don't
+        # progress on points.
+        if not ladder or rank not in ladder:
             await interaction.followup.send(
-                f"ℹ️ {who} on an appointed rank (**{stats['rank'] or '—'}** in "
-                f"**{stats['detachment'] or '—'}**) — no points progression.", ephemeral=True)
+                f"ℹ️ {who} on an appointed rank (**{rank or '—'}** in "
+                f"**{company or '—'}**) — no points progression.", ephemeral=True)
             return
-        if progress["next_rank"] is None:
+
+        idx = ladder.index(rank)
+        # Levy → Soldier is placement-driven, not points.
+        if idx == 0:
+            await interaction.followup.send(
+                f"🪖 {who} a **Levy** — attend a **Basic Levy Training** and you'll be "
+                f"placed into a retinue as a **Soldier**. Ours is the Fury!", ephemeral=True)
+            return
+        # Man-at-Arms is the ladder ceiling; Corporal and above are appointed.
+        if idx >= len(ladder) - 1:
             await interaction.followup.send(
                 f"🏆 {who} at the top of the ladder — **Man-at-Arms**. Ours is the Fury!",
                 ephemeral=True)
             return
 
-        lines = []
-        for label, have, need, met in progress["requirements"]:
-            mark = "✅" if met else "⬜"
-            lines.append(f"{mark} **{label}:** {have} / {need}")
+        step = config.RANK_STEP
+        have = max(0, min(pts, step))
+        next_rank = ladder[idx + 1]
+        bar = "🟦" * have + "⬜" * (step - have)
 
         embed = discord.Embed(
-            title=f"⚔️ Progress to {progress['next_rank']}",
-            description="\n".join(lines),
+            title=f"⚔️ Progress to {next_rank}",
+            description=f"{bar}\n**{have} / {step}** event points",
             color=discord.Color.gold(),
         )
-        embed.set_footer(text=f"{stats['detachment']} • current rank: {stats['rank']}")
+        embed.set_footer(text=f"{company} • current rank: {rank}")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     # ── daily service-milestone pass ─────────────────────────────────────

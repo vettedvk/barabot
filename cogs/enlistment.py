@@ -17,6 +17,8 @@ import audit_log
 import config
 import util
 from views.enlistment_panel import EnlistmentPanelView
+from views.envoy_panel import EnvoyPanelView
+from views.court_panel import CourtPanelView
 
 log = logging.getLogger(__name__)
 
@@ -75,15 +77,11 @@ class EnlistmentCog(commands.Cog):
         )
         embed.add_field(
             name="Military Enlistment",
-            value="Press **Begin Enlistment** below. Once you send in your submission, be patient for review.",
+            value="Press **Begin Enlistment** below, pick your region, and fill in the form. "
+                  "Once you send in your submission, be patient for review.",
             inline=False,
         )
-        embed.add_field(
-            name="Diplomatic Entry",
-            value="Press **Envoy Application** below. Once you send in your submission, be patient for review.",
-            inline=False,
-        )
-        embed.set_footer(text="Any issues? Contact an officer for assistance.")
+        embed.set_footer(text="Envoy and Court entry have their own panels. Any issues? Contact an officer.")
 
         # Re-upload the banner so the hosted link doesn't matter long-term.
         file = None
@@ -106,6 +104,52 @@ class EnlistmentCog(commands.Cog):
         await interaction.followup.send(
             f"✅ Enlistment panel posted in {channel.mention}.", ephemeral=True
         )
+
+    @app_commands.command(
+        name="setup_envoy_panel",
+        description="[Admin] Post the Envoy (diplomatic entry) panel in this channel.",
+    )
+    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
+    async def setup_envoy_panel(self, interaction: discord.Interaction):
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Bot Admins only.", ephemeral=True)
+            return
+        embed = discord.Embed(
+            title="🕊️ House Baratheon — Diplomatic Envoys",
+            description=(
+                "Representing another house or allegiance? Press **Envoy Application** below.\n\n"
+                "Name the real Game of Thrones house or allegiance you speak for (e.g. House Stark, "
+                f"the Faith of the Seven, the Night's Watch). Each house may have at most "
+                f"**{config.ENVOY_CAP}** envoys."
+            ),
+            color=discord.Color.teal(),
+        )
+        embed.set_footer(text="Once you send in your submission, be patient for review.")
+        await interaction.channel.send(embed=embed, view=EnvoyPanelView())
+        await interaction.response.send_message(
+            f"✅ Envoy panel posted in {interaction.channel.mention}.", ephemeral=True)
+
+    @app_commands.command(
+        name="setup_court_panel",
+        description="[Admin] Post the Court of Storm's End application panel in this channel.",
+    )
+    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
+    async def setup_court_panel(self, interaction: discord.Interaction):
+        if not _is_admin(interaction):
+            await interaction.response.send_message("❌ Bot Admins only.", ephemeral=True)
+            return
+        embed = discord.Embed(
+            title="⚖️ Court of Storm's End — Applications",
+            description=(
+                "Seeking a place in the Court? Press **Court Application** below to confirm your "
+                "identity and sit the written test. Approved applicants join the Court as a **Clerk**."
+            ),
+            color=discord.Color.purple(),
+        )
+        embed.set_footer(text="Once you send in your submission, be patient for review.")
+        await interaction.channel.send(embed=embed, view=CourtPanelView())
+        await interaction.response.send_message(
+            f"✅ Court panel posted in {interaction.channel.mention}.", ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

@@ -27,8 +27,9 @@ from typing import Optional
 # Auto-promotion ladders (index 0 = starting rank). Companies not listed here
 # use fully manual ranks and are never auto-computed.
 AUTO_LADDERS = {
-    "Black Stags":   ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
+    "Stormbreakers": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
     "Thunderhooves": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
+    "Breaknecks":    ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
 }
 
 # Minimum stats that justify sitting at each ladder tier — used to seed
@@ -85,6 +86,64 @@ def compute_rank(
     return ladder[tier]
 
 
+def apply_points(
+    company: str,
+    current_rank: str,
+    current_points: int,
+    added: int,
+    step: int = 5,
+) -> tuple[str, int, list[str]]:
+    """
+    Per-rank points model. `current_points` is points earned SINCE the member's
+    last promotion (0..step-1), NOT a cumulative career total. Adds `added`
+    points and climbs the auto ladder one step per `step` points, carrying any
+    remainder into the new rank.
+
+    Two ends of the ladder don't move on points:
+      • Levy → Soldier is a PLACEMENT step (a Basic Levy Training sorts a Levy
+        into a detachment as a Soldier), so a Levy only banks points.
+      • Man-at-Arms is the ladder ceiling — Corporal and above are appointed —
+        so a Man-at-Arms banks points without promoting.
+
+    Members on manual/station/court ranks (not on an auto ladder) also just bank
+    points. Returns (new_rank, new_points, promotions) where promotions is the
+    ordered list of ranks climbed (empty when none).
+    """
+    points = max(0, current_points) + max(0, added)
+    promotions: list[str] = []
+
+    ladder = AUTO_LADDERS.get(company)
+    if not ladder or current_rank not in ladder:
+        return current_rank, points, promotions
+
+    idx = ladder.index(current_rank)
+    if idx == 0:  # Levy — promoted only by placement
+        return current_rank, points, promotions
+
+    while idx < len(ladder) - 1 and points >= step:
+        points -= step
+        idx += 1
+        promotions.append(ladder[idx])
+
+    return ladder[idx], points, promotions
+
+
+def points_to_next(company: str, current_rank: str, step: int = 5) -> Optional[int]:
+    """
+    Points still needed for the next auto-ladder promotion from `current_rank`,
+    given the per-rank model. Returns `step` as the full requirement (callers
+    subtract in-rank points held). None when the rank has no points-driven next
+    step: not on a ladder, a Levy (placement-driven), or Man-at-Arms (ceiling).
+    """
+    ladder = AUTO_LADDERS.get(company)
+    if not ladder or current_rank not in ladder:
+        return None
+    idx = ladder.index(current_rank)
+    if idx == 0 or idx >= len(ladder) - 1:
+        return None
+    return step
+
+
 def never_demote(company: str, current_rank: str, computed_rank: Optional[str]) -> str:
     """
     Grandfather rule: a rank, once held, is only ever removed manually. Returns
@@ -116,7 +175,7 @@ def min_stats_for_rank(company: str, rank: str) -> dict:
 
 def is_leadership_rank(rank: str) -> bool:
     """Manually appointed ranks — never touched by the points engine."""
-    return rank not in AUTO_LADDERS.get("Black Stags", [])
+    return rank not in AUTO_LADDERS.get("Stormbreakers", [])
 
 
 def next_rank_progress(
