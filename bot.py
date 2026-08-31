@@ -18,6 +18,7 @@ from views.discharge_panel import DischargePanelView
 from views.loa_review import LOAReviewView
 from views.loa_panel import LOAPanelView
 from views.self_update_panel import SelfUpdatePanelView
+from views.profile_completion_panel import ProfileCompletionView
 from views.enlistment_panel import EnlistmentPanelView
 from views.enlistment_review import EnlistmentReviewView, EnvoyReviewView
 from views.region_panel import RegionPanelView
@@ -87,6 +88,7 @@ class BaratheonBot(commands.Bot):
         self.add_view(LOAReviewView())
         self.add_view(LOAPanelView())
         self.add_view(SelfUpdatePanelView())
+        self.add_view(ProfileCompletionView())
         self.add_view(RegionPanelView())
         for trial_key in TRIALS:  # one persistent button per trial
             self.add_view(TrialRequestView(trial_key))
@@ -111,6 +113,7 @@ class BaratheonBot(commands.Bot):
             "cogs.titles",
             "cogs.role_hygiene",
             "cogs.discord_sync",
+            "cogs.profile_sweep",
             "cogs.region",
             "cogs.migration",
             "cogs.migrate_v2",

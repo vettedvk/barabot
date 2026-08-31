@@ -83,6 +83,7 @@ RULER_COMMANDS = [
     ("/migrate_roster_v2", "One-off: copy every member from the legacy roster into the new Roster V2, unsorted (no detachment)."),
     ("/apply_roster_roles [member] [dry_run]", "Sync Discord roles from the roster — strip legacy roles and apply each member's rank/detachment. Preview first."),
     ("/toggle_sync", "Turn the periodic Discord→Notion sync on/off at runtime."),
+    ("/run_profile_sweep [dry_run]", "Run the weekly missing-field sweep now — DM members with blank roster fields; unreachable/blank-ID rows are reported to the house lead. Preview first."),
     ("/undo_role_changes [hours] [dry_run]", "Reverse the bot's own role changes over the last N hours (incident recovery; preview first)."),
 ]
 
