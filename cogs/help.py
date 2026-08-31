@@ -30,7 +30,6 @@ MEMBER_COMMANDS = [
 # Officer tier — Military Command access roles (and above).
 OFFICER_COMMANDS = [
     ("/event [detachment] [title]", "Announce an event — DMs everyone in that retinue, or House-wide in one go."),
-    ("/set_rank [member] [rank]", "Manually set a member's rank (manual ladders + leadership appointments)."),
     ("/force_enlist [member] [fleet] [as_envoy] …", "Manually enlist a member — military (retinue/Levy) or, with as_envoy, as a diplomatic Envoy."),
     ("/force_discharge [member]", "Manually discharge an enlisted member or envoy (archives all Notion rows, strips roles, grants Visitor)."),
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
@@ -49,10 +48,6 @@ LOGGER_COMMANDS = [
 
 # Full-admin tier — every non-destructive command.
 ADMIN_COMMANDS = [
-    ("/create_council_title [name]", "Add a new ceremonial council title to the list."),
-    ("/assign_council_title [member] [title]", "Give a council member a title (e.g. Lord Admiral)."),
-    ("/relations", "Display House Baratheon's diplomatic relations."),
-    ("/relations_set [house] [status]", "Set or add a house's diplomatic status."),
     ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant; requests open private ticket channels)."),
     ("/setup_region_panel", "Post the persistent 'Set My Region' retinue-sorting panel in the current channel."),
     ("/self_update", "Post the 'Update Roblox Info' self-service panel (members fill in their own Roblox ID/username; auto-saved, no review)."),

@@ -11,8 +11,7 @@ Model (Option A — one roster row per thing a member belongs to):
     Storm members keep their main retinue, so two rows is their norm;
     Stormguard and Court members hold only their own row.
   • Command members (Council of Storm's End and ABOVE) additionally get a
-    "High Command" row carrying their council rank (their ceremonial Title is
-    set separately via /assign_council_title and is never touched here).
+    "High Command" row carrying their council rank.
   • Officers (Corporal and above) are manually ranked and don't earn points —
     the sync still mirrors their rank from Discord, it just never recomputes it.
 
@@ -138,7 +137,7 @@ async def reconcile(guild: discord.Guild, bot: discord.Client) -> dict:
     summary["stale_station"] lists members whose Notion row still carries a
     station/court rank whose Discord role they no longer hold — sync
     deliberately never clobbers manual ranks, so these need a human decision
-    (/set_rank, a Discord rank role, or a hand edit in Notion)."""
+    (change the Discord rank role, or a hand edit in Notion)."""
     summary = {"created": 0, "rank_updated": 0, "archived": 0, "abandoned": 0,
                "skipped": 0, "errors": 0, "lorename_updated": 0, "stale_station": []}
 

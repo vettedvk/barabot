@@ -424,15 +424,8 @@ ROSTER_CACHE_REFRESH_SECONDS = 180  # full refresh cadence (picks up manual Noti
 # ── Optional: custom points emoji ──────────────────────────────────────────
 POINTS_EMOJI = None
 
-# ── House Relations ────────────────────────────────────────────────────────
-NOTION_RELATIONS_DB_ID = "e8ed443de41e42f4bdcf190940864c37"
+# Legacy Military Tracking DB — read-only source for the one-off /migrate_roster.
 NOTION_MILITARY_TRACKING_DB_ID = "8823df60b95383ba96b481c3b1c302e9"
-RELATIONS_LOGO_URL = "https://i.ibb.co/Wvg22HKX/Banner.png"
-RELATION_EMOJI = {"Allied": "🟩", "Neutral": "⬜", "Enemy": "🟥"}
-RELATION_REGION_ORDER = [
-    "Crownlands", "Westerlands", "Riverlands", "The North", "Iron Isles",
-    "The Reach", "Dorne", "Stormlands", "The Vale",
-]
 
 # ── Nicknames ──────────────────────────────────────────────────────────────
 NICKNAME_MAX = 32  # Discord limit

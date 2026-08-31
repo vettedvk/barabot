@@ -1,8 +1,8 @@
 """
-Admin cog — roster management slash commands: /set_rank, /sync, /roster,
-/force_enlist, /force_discharge, /remove_roster_entry, /import_roster,
-/migrate_roster, /purge, and the panel-setup commands. Discord is the source of
-truth: role changes flow into Notion automatically (see cogs/discord_sync and
+Admin cog — roster management slash commands: /sync, /roster, /force_enlist,
+/force_discharge, /remove_roster_entry, /import_roster, /migrate_roster, /purge,
+and the panel-setup commands. Discord is the source of truth: rank and detachment
+role changes flow into Notion automatically (see cogs/discord_sync and
 sync_service); /sync is the manual full-reconcile of the same logic.
 """
 
@@ -91,16 +91,6 @@ def _military_role_ids() -> set:
 def _is_military(member: discord.Member) -> bool:
     ids = _military_role_ids()
     return any(r.id in ids for r in member.roles)
-
-
-async def rank_autocomplete(interaction: discord.Interaction, current: str):
-    """Suggest valid ranks as the admin types (config ranks — these have roles)."""
-    cur = current.lower()
-    return [
-        app_commands.Choice(name=r, value=r)
-        for r in config.RANK_ROLE_IDS
-        if cur in r.lower()
-    ][:25]
 
 
 async def _dm_chunks(user: discord.abc.User, header: str, lines: list[str]) -> None:
@@ -313,7 +303,7 @@ class StaleRankReviewView(discord.ui.View):
     Transient review for stale station ranks found by /sync: Notion rows whose
     station/court rank's Discord role is no longer held. The admin picks which
     ranks to CLEAR from Notion (the cell is emptied — the member keeps their
-    row); anything not cleared stays until fixed by hand or /set_rank.
+    row); anything not cleared stays until the Discord rank role is changed.
     Only the invoking admin may act; expires after 600s.
     """
 
@@ -376,8 +366,8 @@ class StaleRankReviewView(discord.ui.View):
         if errors:
             summary += f" ⚠️ **{errors}** failed (see logs)."
         summary += (
-            "\nTheir Rank cells are now empty — give them their real rank via "
-            "`/set_rank` or a Discord rank role (sync will fill it in)."
+            "\nTheir Rank cells are now empty — give them their real rank by "
+            "assigning the Discord rank role (it syncs into Notion automatically)."
         )
         await interaction.edit_original_response(content=summary, view=self)
         if done_labels:
@@ -455,55 +445,6 @@ class ClearRosterConfirmView(discord.ui.View):
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # ── /set_rank ────────────────────────────────────────────────────────
-
-    @app_commands.command(name="set_rank", description="[Officer] Manually set a member's rank.")
-    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
-    @app_commands.describe(member="The Discord member", rank="Target rank")
-    @app_commands.autocomplete(rank=rank_autocomplete)
-    @_officer_check()
-    async def set_rank(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        rank: str,
-    ):
-        await interaction.response.defer(ephemeral=True)
-
-        if rank not in config.RANK_ROLE_IDS:
-            valid = ", ".join(config.RANK_ROLE_IDS.keys())
-            await interaction.followup.send(
-                f"❌ Unknown rank `{rank}`. Valid ranks: {valid}", ephemeral=True
-            )
-            return
-
-        pages = await ns.get_members_by_discord_id(str(member.id))
-        if not pages:
-            await interaction.followup.send("❌ Member not found in roster.", ephemeral=True)
-            return
-
-        # Multi-row members: update the row whose detachment ladder contains
-        # this rank (e.g. Guardsman → their Stormguard row), else the first row.
-        roster_page, stats = None, None
-        for p in pages:
-            s = ns.extract_member_stats(p["properties"])
-            if rank in config.DETACHMENT_RANKS.get(s["detachment"], []):
-                roster_page, stats = p, s
-                break
-        if roster_page is None:
-            roster_page = pages[0]
-            stats = ns.extract_member_stats(roster_page["properties"])
-        company = stats["detachment"]
-
-        await ns.set_member_rank(roster_page["id"], rank)
-        await role_service.apply_rank_and_company(
-            member, company, rank, old_rank=stats["rank"], lorename=stats["lorename"]
-        )
-
-        await interaction.followup.send(
-            f"✅ {member.mention}'s rank set to **{rank}**.", ephemeral=True
-        )
 
     # ── /sync ────────────────────────────────────────────────────────────
 
@@ -656,7 +597,7 @@ class AdminCog(commands.Cog):
 
             # Never auto-import officers (Corporal+) or High Command — their ranks
             # are manually appointed and don't track points. Set by hand via
-            # /force_enlist, /set_rank, or simply by giving the Discord role.
+            # /force_enlist, or simply by giving the Discord rank role.
             if detachment == "High Command" or rank in config.OFFICER_RANKS:
                 skipped_manual += 1
                 if len(preview_lines) < 25:

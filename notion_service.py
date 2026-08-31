@@ -264,31 +264,6 @@ async def clear_member_rank(page_id: str) -> None:
     await _update_and_invalidate(page_id, {"Rank": {"select": None}})
 
 
-async def set_member_title(page_id: str, title: str) -> None:
-    """Set a council member's ceremonial Title (e.g. Lord Admiral) on their roster row."""
-    await _update_and_invalidate(page_id, {"Title": _select(title)})
-
-
-async def add_title_option(title: str) -> bool:
-    """
-    Add a new option to the roster's 'Title' select property. Returns False if it
-    already exists. Used by /create_council_title so titles can be added at runtime.
-    """
-    nc = get_client()
-    db = await nc.databases.retrieve(database_id=_roster_db())
-    prop = db.get("properties", {}).get("Title", {}) or {}
-    options = [{"name": o["name"]} for o in (prop.get("select", {}) or {}).get("options", [])]
-    if any(o["name"].lower() == title.lower() for o in options):
-        return False
-    options.append({"name": title})
-    await nc.databases.update(
-        database_id=_roster_db(),
-        properties={"Title": {"select": {"options": options}}},
-    )
-    _schema_cache.pop("Title", None)  # bust the cached option list
-    return True
-
-
 async def set_member_company(page_id: str, company: str, rank: str,
                              reset_points: bool = False) -> None:
     props = {
@@ -730,55 +705,6 @@ async def log_advancement(
     )
 
 
-# ── House Relations helpers ────────────────────────────────────────────────
-
-async def get_all_relations() -> list[dict]:
-    """Return every house relation as {house, region, status, order, page_id}."""
-    pages = await _query_all(config.NOTION_RELATIONS_DB_ID)
-    out: list[dict] = []
-    for page in pages:
-        p = page["properties"]
-        out.append({
-            "page_id": page["id"],
-            "house":   _get_title(p, "House"),
-            "region":  ((p.get("Region", {}) or {}).get("select") or {}).get("name", ""),
-            "status":  ((p.get("Status", {}) or {}).get("select") or {}).get("name", ""),
-            "order":   (p.get("Order", {}) or {}).get("number"),
-        })
-    return out
-
-
-async def set_relation(house: str, status: str, region: Optional[str] = None) -> str:
-    """Update a house's status (and region if given), or create it. Returns 'updated'/'created'."""
-    nc = get_client()
-    resp = await nc.databases.query(
-        database_id=config.NOTION_RELATIONS_DB_ID,
-        filter={"property": "House", "title": {"equals": house}},
-    )
-    results = resp.get("results", [])
-    if results:
-        props = {"Status": _select(status)}
-        if region:
-            props["Region"] = _select(region)
-        await nc.pages.update(page_id=results[0]["id"], properties=props)
-        return "updated"
-
-    if not region:
-        raise ValueError("Region is required to add a new house.")
-    existing = await get_all_relations()
-    next_order = max([r["order"] for r in existing if r["order"] is not None], default=0) + 1
-    await nc.pages.create(
-        parent={"database_id": config.NOTION_RELATIONS_DB_ID},
-        properties={
-            "House":  _title(house),
-            "Region": _select(region),
-            "Status": _select(status),
-            "Order":  _number(next_order),
-        },
-    )
-    return "created"
-
-
 # ── Property helpers ───────────────────────────────────────────────────────
 
 def _title(text: str) -> dict:
@@ -844,7 +770,6 @@ def extract_member_stats(props: dict) -> dict:
         "rank":             (((props.get("Rank") or {}).get("select")) or {}).get("name", ""),
         "detachment":       (((props.get("Detachment") or {}).get("select")) or {}).get("name", ""),
         "status":           (((props.get("Status") or {}).get("select")) or {}).get("name", ""),
-        "title":            ((props.get("Title", {}) or {}).get("select") or {}).get("name", ""),
         "discord_user_id":  _get_text(props, "Discord User ID"),
         "discord_username": _get_text(props, "Discord Username"),
         "lorename":         _get_text(props, "Lorename"),
