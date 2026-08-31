@@ -37,7 +37,7 @@ from views.self_update_panel import SelfUpdatePanelView
 # commands so there's one place to update.
 _DETACHMENT_CHOICES = [
     app_commands.Choice(name=d, value=d) for d in
-    ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+    ("Stormbreakers", "Thunderhooves", "The Black Stags",
      "Stormguard", "Knights of the Storm", "Court", "High Command")
 ]
 # Detachments a member can be force-enlisted straight into (active mains).
@@ -773,7 +773,7 @@ class AdminCog(commands.Cog):
             if uid:
                 groups.setdefault(uid, []).append((page, stats))
 
-        ELIGIBLE = {"Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+        ELIGIBLE = {"Stormbreakers", "Thunderhooves", "The Black Stags",
                     "Stormguard", "Knights of the Storm", "Court"}
         discharge: list[dict] = []
         review: list[str] = []

@@ -42,7 +42,6 @@ log = logging.getLogger(__name__)
 STARTING_RANK = {
     "Stormbreakers":        "Levy",
     "Thunderhooves":        "Levy",
-    "Breaknecks":           "Levy",
     "The Black Stags":      "Knight Banneret",
     "Stormguard":           "Squire",
     "Knights of the Storm": "Squire",
@@ -51,11 +50,11 @@ STARTING_RANK = {
 }
 
 # Order used when one "primary" detachment must be picked (import / display).
-_PRIORITY = {"Stormbreakers": 0, "Thunderhooves": 1, "Breaknecks": 2,
+_PRIORITY = {"Stormbreakers": 0, "Thunderhooves": 1,
              "The Black Stags": 3, "Stormguard": 4, "Knights of the Storm": 5,
              "Court": 6, "High Command": 7}
 
-_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+_DETACHMENTS = ("Stormbreakers", "Thunderhooves", "The Black Stags",
                 "Stormguard", "Knights of the Storm", "Court")
 
 
