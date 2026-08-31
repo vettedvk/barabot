@@ -1,9 +1,9 @@
 """
-Admin cog — roster management slash commands: /move_detachment, /set_rank,
-/sync, /roster, /force_enlist, /force_discharge, /add_roster_entry,
-/remove_roster_entry, /import_roster, /migrate_roster, /purge, and the
-panel-setup commands. Discord is the source of truth; /sync mirrors role changes
-into Notion (see sync_service).
+Admin cog — roster management slash commands: /set_rank, /sync, /roster,
+/force_enlist, /force_discharge, /remove_roster_entry, /import_roster,
+/migrate_roster, /purge, and the panel-setup commands. Discord is the source of
+truth: role changes flow into Notion automatically (see cogs/discord_sync and
+sync_service); /sync is the manual full-reconcile of the same logic.
 """
 
 import asyncio
@@ -30,7 +30,7 @@ import sync_service
 import util
 from rank_engine import min_stats_for_rank
 from roblox import validate_roblox_user, RobloxValidationError
-from sync_service import STARTING_RANK, derive_detachment_and_rank, lorename_from_nick
+from sync_service import derive_detachment_and_rank, lorename_from_nick
 from views.self_update_panel import SelfUpdatePanelView
 
 # Detachment choice lists (new combat-role structure), shared by the roster
@@ -99,23 +99,6 @@ async def rank_autocomplete(interaction: discord.Interaction, current: str):
     return [
         app_commands.Choice(name=r, value=r)
         for r in config.RANK_ROLE_IDS
-        if cur in r.lower()
-    ][:25]
-
-
-async def notion_rank_autocomplete(interaction: discord.Interaction, current: str):
-    """Suggest ranks from the Notion roster's Rank options (incl. manually-added
-    ones). Falls back to the config ranks if the schema can't be read."""
-    try:
-        options = await ns.get_select_options("Rank")
-    except Exception:
-        options = []
-    if not options:
-        options = list(config.RANK_ROLE_IDS)
-    cur = current.lower()
-    return [
-        app_commands.Choice(name=r, value=r)
-        for r in options
         if cur in r.lower()
     ][:25]
 
@@ -473,67 +456,6 @@ class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # ── /move_detachment ─────────────────────────────────────────────────
-
-    @app_commands.command(name="move_detachment", description="[Officer] Move a member to a different detachment (optionally set their rank).")
-    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
-    @app_commands.describe(
-        member="The Discord member",
-        company="Target detachment",
-        rank="Rank in the new detachment (optional; defaults to that detachment's starting rank)",
-    )
-    @app_commands.choices(company=_DETACHMENT_CHOICES)
-    @app_commands.autocomplete(rank=rank_autocomplete)
-    @_officer_check()
-    async def set_company(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        company: app_commands.Choice[str],
-        rank: str = "",
-    ):
-        await interaction.response.defer(ephemeral=True)
-
-        # Multi-row members: move their FLEET row when they have one (fleet
-        # membership is the "primary" posting); otherwise their first row.
-        roster_page = await ns.get_fleet_member_by_discord_id(str(member.id))
-        if not roster_page:
-            await interaction.followup.send("❌ Member not found in roster.", ephemeral=True)
-            return
-
-        props   = roster_page["properties"]
-        stats   = ns.extract_member_stats(props)
-        old_company = stats["detachment"]
-        new_company = company.value
-
-        # Rank: use the one given (validated), else the detachment's starting rank.
-        if rank:
-            if rank not in config.RANK_ROLE_IDS:
-                await interaction.followup.send(
-                    f"❌ Unknown rank `{rank}`. Leave blank to use the starting rank.", ephemeral=True
-                )
-                return
-            new_rank = rank
-        else:
-            new_rank = STARTING_RANK.get(new_company, "Levy")
-
-        if old_company == new_company and stats["rank"] == new_rank:
-            await interaction.followup.send(
-                f"ℹ️ {member.mention} is already {new_company} / {new_rank}.", ephemeral=True
-            )
-            return
-
-        await ns.set_member_company(roster_page["id"], new_company, new_rank)
-        await role_service.apply_rank_and_company(
-            member, new_company, new_rank,
-            old_company=old_company, old_rank=stats["rank"], lorename=stats["lorename"]
-        )
-
-        await interaction.followup.send(
-            f"✅ {member.mention} moved to **{new_company}** at rank **{new_rank}**.",
-            ephemeral=True,
-        )
-
     # ── /set_rank ────────────────────────────────────────────────────────
 
     @app_commands.command(name="set_rank", description="[Officer] Manually set a member's rank.")
@@ -733,8 +655,8 @@ class AdminCog(commands.Cog):
                 continue
 
             # Never auto-import officers (Corporal+) or High Command — their ranks
-            # are manually appointed and don't track points. Added by hand via
-            # /force_enlist, /set_rank, /move_detachment.
+            # are manually appointed and don't track points. Set by hand via
+            # /force_enlist, /set_rank, or simply by giving the Discord role.
             if detachment == "High Command" or rank in config.OFFICER_RANKS:
                 skipped_manual += 1
                 if len(preview_lines) < 25:
@@ -1184,82 +1106,6 @@ class AdminCog(commands.Cog):
             detail = "removed their **Envoy** standing (no roster entry)"
         await interaction.followup.send(
             f"✅ Discharged {member.mention} — {detail}.", ephemeral=True
-        )
-
-    # ── /add_roster_entry ────────────────────────────────────────────────
-
-    @app_commands.command(
-        name="add_roster_entry",
-        description="[Officer] Add a Notion roster entry only (no Discord roles; allows multiple per member).",
-    )
-    @app_commands.guilds(discord.Object(id=config.GUILD_ID))
-    @app_commands.describe(
-        member="The Discord member",
-        detachment="Detachment for this entry",
-        rank="Rank for this entry",
-        lorename="Lore name (optional)",
-        roblox_username="Roblox username (optional)",
-        roblox_id="Roblox ID (optional)",
-    )
-    @app_commands.choices(detachment=_DETACHMENT_CHOICES)
-    @app_commands.autocomplete(rank=notion_rank_autocomplete)
-    @_officer_check()
-    async def add_roster_entry(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        detachment: app_commands.Choice[str],
-        rank: str,
-        lorename: str = "",
-        roblox_username: str = "",
-        roblox_id: str = "",
-    ):
-        await interaction.response.defer(ephemeral=True)
-
-        valid_ranks = await ns.get_select_options("Rank")
-        if valid_ranks and rank not in valid_ranks:
-            await interaction.followup.send(
-                f"❌ `{rank}` isn't a Rank option in the Notion roster. "
-                "Pick one from the autocomplete list.",
-                ephemeral=True,
-            )
-            return
-
-        # Identity (Roblox username/ID + lore name) is REPLICATED from the member's
-        # existing roster entry so a second posting stays consistent. If they have
-        # no entry yet (shouldn't normally happen), those details must be supplied
-        # manually on the command.
-        existing = await ns.get_members_by_discord_id(str(member.id))
-        if existing:
-            src = ns.extract_member_stats(existing[0]["properties"])
-            roblox_username = src["roblox_username"]
-            roblox_id       = src["roblox_id"]
-            lorename        = src["lorename"]
-        elif not (roblox_username and roblox_id and lorename):
-            await interaction.followup.send(
-                f"❌ {member.mention} has no existing roster entry to copy from, so you must "
-                "provide `roblox_username`, `roblox_id` and `lorename` manually.",
-                ephemeral=True,
-            )
-            return
-
-        # Notion-only: always create a NEW row (command members can hold several).
-        # Date Enlisted = the day they joined the guild (date-only), like /import_roster.
-        await ns.create_imported_member(
-            roblox_username=roblox_username,
-            roblox_id=roblox_id,
-            lorename=lorename,
-            discord_username=str(member),
-            discord_user_id=str(member.id),
-            detachment=detachment.value,
-            rank=rank,
-            date_enlisted=member.joined_at,
-        )
-
-        await interaction.followup.send(
-            f"✅ Added a roster entry for {member.mention}: **{detachment.value} / {rank}**. "
-            "No Discord roles were changed.",
-            ephemeral=True,
         )
 
     # ── /remove_roster_entry ─────────────────────────────────────────────

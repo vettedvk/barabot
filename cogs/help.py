@@ -31,12 +31,10 @@ MEMBER_COMMANDS = [
 OFFICER_COMMANDS = [
     ("/event [detachment] [title]", "Announce an event — DMs everyone in that retinue, or House-wide in one go."),
     ("/set_rank [member] [rank]", "Manually set a member's rank (manual ladders + leadership appointments)."),
-    ("/move_detachment [member] [company] [rank]", "Move a member to a different detachment, optionally setting their rank in the same command."),
     ("/force_enlist [member] [fleet] [as_envoy] …", "Manually enlist a member — military (retinue/Levy) or, with as_envoy, as a diplomatic Envoy."),
     ("/force_discharge [member]", "Manually discharge an enlisted member or envoy (archives all Notion rows, strips roles, grants Visitor)."),
-    ("/add_roster_entry [member] [detachment] [rank] …", "Add a Notion roster entry only (no Discord roles). Copies Roblox/lore from the member's existing entry."),
     ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
-    ("/sync", "Reconcile manual Discord role changes into Notion (transfers detachments, updates ranks, logs abandoned posts)."),
+    ("/sync", "Full manual reconcile of Discord roles into Notion (detachments, ranks, abandoned posts). Role changes already sync automatically — this is the catch-up pass."),
     ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
     ("/strike [member] [reason]", "Issue a disciplinary strike (3 active → demote a rank, 5 → removal; strikes expire after 7 days)."),
     ("/strikes [member]", "View a member's active strikes."),
