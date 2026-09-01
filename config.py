@@ -3,8 +3,7 @@ Central config — all IDs and constants live here.
 
 2026-08 military restructure: detachments are now combat-role based. Two active
 main retinues on the points ladder — STORMBREAKERS (close combat, internal EU/NA
-split via the region tags) and THUNDERHOOVES (cavalry, temporarily incl. archers)
-— plus BREAKNECKS (future archery, role exists but inactive). Specialised
+split via the region tags) and THUNDERHOOVES (cavalry, incl. archers). Specialised
 retinues, top→bottom: STORMGUARD → THE BLACK STAGS (elite; SG prospects) →
 KNIGHTS OF THE STORM. The Court runs alongside; several court ranks are DUAL
 (held together with a military posting).
@@ -110,7 +109,6 @@ REGION_CHOICES = ["EU", "NA"]
 DETACHMENT_COMMAND_ROLE_IDS = {
     "Stormbreakers":        1515481526895378504,
     "Thunderhooves":        1540429088408215574,
-    "Breaknecks":           1540429120738168882,
     "The Black Stags":      1515481460688289862,
     "Stormguard":           1488659967941808131,
     "Knights of the Storm": 1488659967941808130,
@@ -124,28 +122,27 @@ ENLISTMENT_BANNER_URL = "https://i.ibb.co/Wvg22HKX/Banner.png"
 # Main combat retinues use the points ladder. Specialised retinues + Court are
 # appointment-based. High Command has no single retinue role.
 COMPANY_ROLE_IDS = {
-    "Stormbreakers":        1540427573375406232,   # close combat (main)
+    "Stormbreakers":        1515430181135716432,   # close combat (main)
     "Thunderhooves":        1540426846703976468,   # cavalry, incl. archers for now (main)
-    "Breaknecks":           1540426994196545559,   # future archery (inactive)
-    "The Black Stags":      1540427514210554096,   # elite retinue (SG prospects)
+    "The Black Stags":      1515430116501753948,   # elite retinue (SG prospects)
     "Stormguard":           1522250233306681434,
-    "Knights of the Storm": 1488659968067371083,
+    "Knights of the Storm": 1488659968067371083,   # "Storm Knights" in Discord
     "Court":                1525947287803662521,   # == ROLE_COURT
 }
 
 # Defunct roles from the old region-based structure — stripped by
 # /apply_roster_roles during the transition. No-ops if the role is already gone.
+# NB: 1515430116501753948 and 1515430181135716432 are NOT legacy — they are the
+# live Black Stags / Stormbreakers detachment roles (see COMPANY_ROLE_IDS), and
+# 1522252463057670236 is the live Util separator. Keep them out of this set.
 LEGACY_ROLE_IDS = {
-    1515430116501753948,  # old Black Stags retinue (region)
-    1515430181135716432,  # old Thunderhooves retinue (region)
     1522250356762083409,  # old Knights separator
     1526397224542797944,  # old Black Stags separator
     1488659968067371085,  # old Thunderhooves separator
-    1522252463057670236,  # old Util separator
 }
 
 # Main combat detachments (the auto points-ladder ones).
-MAIN_COMBAT_DETACHMENTS = ["Stormbreakers", "Thunderhooves", "Breaknecks"]
+MAIN_COMBAT_DETACHMENTS = ["Stormbreakers", "Thunderhooves"]
 # Retinues a Levy can be placed into after Basic Levy Training (active mains).
 PLACEMENT_DETACHMENTS = ["Stormbreakers", "Thunderhooves"]
 
@@ -202,7 +199,6 @@ _MAIN_COMBAT_RANKS = [
 DETACHMENT_RANKS = {
     "Stormbreakers":        list(_MAIN_COMBAT_RANKS),
     "Thunderhooves":        list(_MAIN_COMBAT_RANKS),
-    "Breaknecks":           list(_MAIN_COMBAT_RANKS),
     "The Black Stags":      ["Knight Banneret", "Lieutenant", "Captain"],
     "Stormguard":           ["Squire", "Guardsman", "Lieutenant", "Stormguard Lord Commander"],
     "Knights of the Storm": ["Squire", "Knight", "Captain"],
@@ -352,8 +348,11 @@ LOWER_COURT_ROLE_IDS = {
 
 STATUS_ROLE_IDS = {
     ROLE_HOUSE_BARATHEON,
+    1544021446924173434,   # House Selmy of Harvest Hall
+    1527416526120947822,   # Aurochs Brotherhood
     1526080693480849429,   # House Dondarrion of Blackhaven
     1518346655227969707,   # House Connington of Griffins Roost
+    1527812296502542336,   # House Swann of Stonehelm
     1488659967979290799,   # Sworn Vassal
     1488659967924895930,   # Genre Staff
     ROLE_ENVOY,            # Envoy
@@ -374,7 +373,7 @@ SEPARATOR_TRIGGERS = {
     },
     SEPARATOR_RETINUE: {
         COMPANY_ROLE_IDS[d] for d in
-        ("Stormbreakers", "Thunderhooves", "Breaknecks", "The Black Stags",
+        ("Stormbreakers", "Thunderhooves", "The Black Stags",
          "Stormguard", "Knights of the Storm")
     },
     SEPARATOR_STATUS: set(STATUS_ROLE_IDS),

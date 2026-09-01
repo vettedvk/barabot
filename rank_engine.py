@@ -29,7 +29,6 @@ from typing import Optional
 AUTO_LADDERS = {
     "Stormbreakers": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
     "Thunderhooves": ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
-    "Breaknecks":    ["Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms"],
 }
 
 # Minimum stats that justify sitting at each ladder tier — used to seed
