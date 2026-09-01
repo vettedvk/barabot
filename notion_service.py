@@ -392,39 +392,6 @@ async def get_roster_v2_discord_ids() -> set[str]:
     return ids
 
 
-async def create_roster_v2_member(
-    *, roblox_username: str, roblox_id: str, discord_user_id: str,
-    discord_username: str, lorename: str, rank: str, status: str,
-    points: int, combat_trainings: int, joints: int,
-    prs: int, skirmishes: int, days_served: int, date_enlisted: str,
-    basic_levy: bool,
-) -> None:
-    """Create one UNSORTED member row (no Detachment) in the active roster."""
-    db_id = _roster_db()
-    nc = get_client()
-    props = {
-        "Username":         _title(roblox_username or ""),
-        "Roblox ID":        _text(roblox_id or ""),
-        "Discord User ID":  _text(discord_user_id),
-        "Discord Username": _text(discord_username or ""),
-        "Lorename":         _text(lorename or ""),
-        "Status":           _select(status or "Active"),
-        "Event Points":     _number(points),
-        "Combat Trainings": _number(combat_trainings),
-        "Joints":           _number(joints),
-        "PRs":              _number(prs),
-        "Skirmishes":       _number(skirmishes),
-        "Days Served":      _number(days_served),
-        "Basic Levy Training": _checkbox(basic_levy),
-    }
-    if rank:
-        props["Rank"] = _select(rank)
-    if date_enlisted:
-        props["Date Enlisted"] = {"date": {"start": date_enlisted[:10]}}
-    await nc.pages.create(parent={"database_id": db_id}, properties=props)
-    roster_cache.invalidate_uid(str(discord_user_id))
-
-
 async def archive_page(page_id: str) -> None:
     """Archive (trash) a Notion page without altering its properties."""
     await get_client().pages.update(page_id=page_id, archived=True)
@@ -476,6 +443,7 @@ async def create_imported_member(
     prs: int = 0,
     basic_levy: bool = False,
     date_enlisted: "datetime | None" = None,
+    region: str = "",
 ) -> dict:
     """
     Create a roster row for a member migrated from the old bot. Event Points and
@@ -486,29 +454,67 @@ async def create_imported_member(
     """
     enlisted = date_enlisted or datetime.now(timezone.utc)
     nc = get_client()
+    props = {
+        "Username":          _title(roblox_username),
+        "Roblox ID":         _text(roblox_id),
+        "Lorename":          _text(lorename),
+        "Discord Username":  _text(discord_username),
+        "Discord User ID":   _text(str(discord_user_id)),
+        "Detachment":        _select(detachment),
+        "Rank":              _select(rank),
+        "Event Points":      _number(points),
+        "Combat Trainings":  _number(combat_trainings),
+        "Joints":            _number(joints),
+        "Skirmishes":        _number(skirmishes),
+        "PRs":               _number(prs),
+        "Status":            _select("Active"),
+        "Date Enlisted":     _date_only(enlisted),
+        config.BASIC_LEVY_FIELD: _checkbox(basic_levy),
+        "Days Served":       _number(max(0, (datetime.now(timezone.utc).date() - enlisted.date()).days)),
+    }
+    if region in config.REGION_ROLE_IDS:
+        props["Region"] = _select(region)
     page = await nc.pages.create(
-        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]},
-        properties={
-            "Username":          _title(roblox_username),
-            "Roblox ID":         _text(roblox_id),
-            "Lorename":          _text(lorename),
-            "Discord Username":  _text(discord_username),
-            "Discord User ID":   _text(str(discord_user_id)),
-            "Detachment":        _select(detachment),
-            "Rank":              _select(rank),
-            "Event Points":      _number(points),
-            "Combat Trainings":  _number(combat_trainings),
-            "Joints":            _number(joints),
-            "Skirmishes":        _number(skirmishes),
-            "PRs":               _number(prs),
-            "Status":            _select("Active"),
-            "Date Enlisted":     _date_only(enlisted),
-            config.BASIC_LEVY_FIELD: _checkbox(basic_levy),
-            "Days Served":       _number(max(0, (datetime.now(timezone.utc).date() - enlisted.date()).days)),
-        },
-    )
+        parent={"database_id": os.environ["NOTION_ROSTER_DB_ID"]}, properties=props)
     roster_cache.invalidate_uid(str(discord_user_id))
     return page
+
+
+async def get_xref_roblox_map() -> dict[str, dict]:
+    """
+    Build {discord_id: {"roblox_username", "roblox_id", "lorename"}} from the
+    PREVIOUS roster (NOTION_ROSTER_XREF_DB_ID) so a Discord-first rebuild can
+    backfill each member's Roblox identity. When a Discord ID has several rows,
+    the one with the most-complete Roblox data wins. Empty if the xref DB isn't
+    configured or can't be read."""
+    db_id = os.environ.get("NOTION_ROSTER_XREF_DB_ID")
+    if not db_id:
+        return {}
+    try:
+        pages = await _query_all(db_id)
+    except Exception as exc:
+        log.warning("get_xref_roblox_map: could not read xref DB: %s", exc)
+        return {}
+    out: dict[str, dict] = {}
+    for page in pages:
+        p = page["properties"]
+        uid = _get_text(p, "Discord User ID")
+        if not uid:
+            continue
+        entry = {
+            "roblox_username": _get_title(p, "Username"),
+            "roblox_id":       _get_text(p, "Roblox ID"),
+            "lorename":        _get_text(p, "Lorename"),
+        }
+        prev = out.get(uid)
+        # Prefer the row that actually has a Roblox ID + username.
+        score = bool(entry["roblox_id"]) + bool(entry["roblox_username"])
+        if prev is None or score > prev["_score"]:
+            entry["_score"] = score
+            out[uid] = entry
+    for e in out.values():
+        e.pop("_score", None)
+    return out
 
 
 # ── Event Log helpers ──────────────────────────────────────────────────────

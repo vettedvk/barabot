@@ -1,20 +1,20 @@
 """
-Roster V2 migration (one-off) — /migrate_roster_v2.
+Roster rebuild (one-off) — /rebuild_roster.
 
-Copies every current member from the legacy roster into the new
-"Baratheon Roster V2" database, ONE row per member and WITHOUT a detachment
-(unsorted) — they get placed into a retinue manually via Discord afterwards.
+Builds the active roster (NOTION_ROSTER_DB_ID) straight from Discord: every member
+holding recognised rank/detachment roles gets one row per detachment (rank,
+region, lore name from their nickname, Discord ID/username), then each member's
+Roblox username + ID are cross-referenced from the PREVIOUS roster
+(NOTION_ROSTER_XREF_DB_ID) and filled in.
 
-Deterministic + re-runnable: members already present in V2 (matched by Discord
-ID) are skipped, so it can be run again safely. The live bot keeps using the old
-roster until the structure cutover — this only writes to V2.
+Deterministic + re-runnable: members already present (matched by Discord ID) are
+skipped, so it can be run again safely. Dry-run by default.
 
 Ruler-gated (Heir/Lady/Lord) since it's a bulk data operation.
 """
 
 import asyncio
 import logging
-import os
 
 import discord
 from discord import app_commands
@@ -23,29 +23,18 @@ from discord.ext import commands
 import config
 import notion_service as ns
 import role_service
+import sync_service
 import util
 
 log = logging.getLogger(__name__)
 
-# Highest → lowest, for collapsing a multi-row member down to their top rank.
-_RANK_PRIORITY = [
-    "Lord of Storm's End", "Lady of Storm's End", "Heir of Storm's End",
-    "Blood of the Storms", "Council of Storm's End",
-    "Chancellor", "Quartermaster", "Secretary of the Court",
-    "Marshal", "Commander", "Stormguard Lord Commander",
-    "Captain", "Lieutenant", "Knight Banneret", "SGT at Arms", "Corporal",
-    "Secretary", "Emissary", "Cupbearer", "Handmaiden", "Clerk",
-    "Knight", "Guardsman", "Squire",
-    "Man-at-Arms", "Veteran Footman", "Footman", "Soldier", "Levy",
-]
-_RANK_INDEX = {name: i for i, name in enumerate(_RANK_PRIORITY)}
 
-
-def _top_rank(ranks: list[str]) -> str:
-    present = [r for r in ranks if r]
-    if not present:
-        return ""
-    return min(present, key=lambda r: _RANK_INDEX.get(r, 999))
+def _region_of(member: discord.Member) -> str:
+    ids = {r.id for r in member.roles}
+    for name, rid in config.REGION_ROLE_IDS.items():
+        if rid in ids:
+            return name
+    return ""
 
 
 class MigrateV2Cog(commands.Cog):
@@ -53,84 +42,95 @@ class MigrateV2Cog(commands.Cog):
         self.bot = bot
 
     @app_commands.command(
-        name="migrate_roster_v2",
-        description="[Ruler] One-off: copy all members into Roster V2, unsorted (no detachment).",
+        name="rebuild_roster",
+        description="[Ruler] Import everyone from Discord into the roster; backfill Roblox from the previous DB.",
     )
     @app_commands.guilds(discord.Object(id=config.GUILD_ID))
-    async def migrate_roster_v2(self, interaction: discord.Interaction):
+    @app_commands.describe(dry_run="Preview only (default). Set False to actually write to Notion.")
+    async def rebuild_roster(self, interaction: discord.Interaction, dry_run: bool = True):
         if not util.is_ruler(interaction.user):
             await interaction.response.send_message(
                 "❌ Heir / Lady / Lord of Storm's End only.", ephemeral=True)
             return
-        if not os.environ.get("NOTION_ROSTER_LEGACY_DB_ID"):
-            await interaction.response.send_message(
-                "❌ Legacy roster not configured (set NOTION_ROSTER_LEGACY_DB_ID).", ephemeral=True)
-            return
 
         await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
 
+        # Roblox identities from the previous roster, keyed by Discord ID.
+        xref = await ns.get_xref_roblox_map()
+        # Skip anyone already in the (new) roster so re-runs are safe.
         existing = await ns.get_roster_v2_discord_ids()
 
-        # Group every non-archived legacy row (Active + LOA) by Discord ID.
-        by_uid: dict[str, list[dict]] = {}
-        for page in await ns.get_legacy_roster_pages():
-            s = ns.extract_member_stats(page["properties"])
-            uid = s["discord_user_id"]
-            if uid:
-                by_uid.setdefault(uid, []).append(s)
+        created = skipped = errors = no_roblox = 0
+        members = seen = 0
+        preview: list[str] = []
 
-        created = skipped = errors = 0
-        for uid, rows in by_uid.items():
+        async for member in guild.fetch_members(limit=None):
+            if member.bot:
+                continue
+            rows = sync_service.derive_detachment_rows(member, guild)
+            if not rows:
+                continue  # holds no recognised rank/detachment roles
+            members += 1
+            uid = str(member.id)
             if uid in existing:
                 skipped += 1
                 continue
-            try:
-                # Stats live on one row; max across rows captures them cleanly.
-                rank = _top_rank([r["rank"] for r in rows])
-                if any(r["status"] == "Active" for r in rows):
-                    status = "Active"
-                elif any(r["status"] == "LOA" for r in rows):
-                    status = "LOA"
-                else:
-                    status = rows[0]["status"] or "Active"
-                identity = max(rows, key=lambda r: r["points"])
-                dates = [r["date_enlisted"] for r in rows if r["date_enlisted"]]
 
-                await ns.create_roster_v2_member(
-                    roblox_username=identity["roblox_username"],
-                    roblox_id=identity["roblox_id"],
-                    discord_user_id=uid,
-                    discord_username=identity["discord_username"],
-                    lorename=identity["lorename"],
-                    rank=rank,
-                    status=status,
-                    # Per-rank points model: 'Event Points' now means points earned
-                    # SINCE the last promotion, so everyone starts their current
-                    # rank fresh at 0 (career total is no longer tracked here).
-                    points=0,
-                    combat_trainings=max(r["combat_trainings"] for r in rows),
-                    joints=max(r["joints"] for r in rows),
-                    prs=max(r["prs"] for r in rows),
-                    skirmishes=max(r["skirmishes"] for r in rows),
-                    days_served=max(r["days_served"] for r in rows),
-                    date_enlisted=min(dates) if dates else "",
-                    basic_levy=any(r["basic_levy"] for r in rows),
-                )
+            region = _region_of(member)
+            info = xref.get(uid, {})
+            lorename = (sync_service.lorename_from_nick(member.nick) if member.nick
+                        else "") or info.get("lorename", "")
+            roblox_username = info.get("roblox_username", "")
+            roblox_id = info.get("roblox_id", "")
+            if not (roblox_username or roblox_id):
+                no_roblox += 1
+
+            if dry_run:
+                if len(preview) < 30:
+                    postings = ", ".join(
+                        f"{d}/{r or sync_service.STARTING_RANK.get(d, 'Levy')}" for d, r in rows)
+                    rb = f" • Roblox: {roblox_username or '—'}" if (roblox_username or roblox_id) else " • Roblox: (none)"
+                    preview.append(f"• {member.display_name}: {postings}{rb}")
                 created += 1
-                await asyncio.sleep(0.34)  # stay under Notion's rate limit
+                continue
+
+            try:
+                for det, rank in rows:
+                    create_rank = rank or sync_service.STARTING_RANK.get(det, "Levy")
+                    await ns.create_imported_member(
+                        roblox_username=roblox_username,
+                        roblox_id=roblox_id,
+                        lorename=lorename,
+                        discord_username=str(member),
+                        discord_user_id=uid,
+                        detachment=det,
+                        rank=create_rank,
+                        points=0,
+                        basic_levy=(create_rank != "Levy"),
+                        date_enlisted=member.joined_at,
+                        region=region,
+                    )
+                    await asyncio.sleep(0.34)  # stay under Notion's rate limit
+                created += 1
             except Exception as exc:
                 errors += 1
-                log.error("migrate_roster_v2 failed for %s: %s", uid, exc)
+                log.error("rebuild_roster failed for %s: %s", uid, exc)
 
-        await interaction.followup.send(
-            f"✅ Roster V2 migration complete.\n"
-            f"• Members found: **{len(by_uid)}**\n"
-            f"• Created: **{created}**\n"
-            f"• Skipped (already present): **{skipped}**"
+        mode = "🔎 DRY RUN — nothing written" if dry_run else "✅ Rebuild complete"
+        msg = (
+            f"**{mode}**\n"
+            f"• Discord members with roster roles: **{members}**\n"
+            f"• {'Would create' if dry_run else 'Created'}: **{created}**\n"
+            f"• Skipped (already in roster): **{skipped}**\n"
+            f"• No Roblox match in previous DB: **{no_roblox}**"
             + (f"\n• Errors: **{errors}** (see logs)" if errors else "")
-            + "\n\nEveryone is **unsorted** (no detachment) — place them into retinues via Discord.",
-            ephemeral=True,
         )
+        if preview:
+            msg += "\n\n__Preview (first 30):__\n" + "\n".join(preview)
+        if dry_run:
+            msg += "\n\nRun `/rebuild_roster dry_run:False` to write it."
+        await interaction.followup.send(msg[:1990], ephemeral=True)
 
     # ── /apply_roster_roles — sync Discord roles FROM the roster ──────────
 
