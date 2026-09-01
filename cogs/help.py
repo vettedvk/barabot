@@ -71,7 +71,7 @@ RULER_COMMANDS = [
     ("/import_roster [dry_run]", "Bulk-import members from their Discord roles into Notion, seeding rank-appropriate points (preview first)."),
     ("/migrate_roster [dry_run]", "Match roster lorenames to the tracking DB and backfill Roblox IDs/usernames (preview first)."),
     ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports retinue conflicts. Preview first."),
-    ("/migrate_roster_v2", "One-off: copy every member from the legacy roster into the new Roster V2, unsorted (no detachment)."),
+    ("/rebuild_roster [dry_run]", "Import everyone from Discord into the roster (rank/detachment/region from their roles) and backfill Roblox username/ID from the previous roster. Preview first."),
     ("/apply_roster_roles [member] [dry_run]", "Sync Discord roles from the roster — strip legacy roles and apply each member's rank/detachment. Preview first."),
     ("/toggle_sync", "Turn the periodic Discord→Notion sync on/off at runtime."),
     ("/run_profile_sweep [dry_run]", "Run the weekly missing-field sweep now — DM members with blank roster fields; unreachable/blank-ID rows are reported to the house lead. Preview first."),
