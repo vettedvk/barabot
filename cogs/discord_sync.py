@@ -1,16 +1,17 @@
 """
 Discord-authority sync — the "Discord at the centre" listener.
 
-When a member's RANK or DETACHMENT roles change in Discord, this upserts their
-Notion roster to match (sync_service.reconcile_member): a hand-given rank role is
-mirrored to Notion, a new detachment gets a row, a dropped detachment's row is
-archived, and a member with no roster entry at all gets one created from their
-Discord ID. Discord is the source of truth for rank/detachment; Notion is the
-durable store that follows it.
+When a member's RANK or DETACHMENT roles — or their NICKNAME — change in Discord,
+this upserts their Notion roster to match (sync_service.reconcile_member): a
+hand-given rank role is mirrored to Notion, a new detachment gets a row, a
+dropped detachment's row is archived, the lore name on every row is refreshed
+from the nickname, and a member with no roster entry at all gets one created from
+their Discord ID. Discord is the source of truth; Notion is the durable store
+that follows it.
 
 Two things keep this quiet and safe:
-  • It only fires when the tracked (rank/detachment/command) role set actually
-    changes — separator, status, and nickname edits are ignored.
+  • It only fires when the tracked (rank/detachment/command) role set OR the
+    nickname actually changes — separator and status role edits are ignored.
   • It skips members the bot itself just edited (role_service loop-guard), so a
     bot promotion (which already wrote Notion first) isn't re-processed.
 
@@ -50,8 +51,10 @@ class DiscordSyncCog(commands.Cog):
 
         before_tracked = {r.id for r in before.roles} & _TRACKED_ROLE_IDS
         after_tracked = {r.id for r in after.roles} & _TRACKED_ROLE_IDS
-        if before_tracked == after_tracked:
-            return  # nothing rank/detachment-related changed
+        roles_changed = before_tracked != after_tracked
+        nick_changed = before.nick != after.nick
+        if not roles_changed and not nick_changed:
+            return  # nothing rank/detachment/name-related changed
 
         # Loop-guard: the bot's own promotions/placements/discharges write Notion
         # first and mark the member here, so skip those (avoids a redundant round

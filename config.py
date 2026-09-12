@@ -411,9 +411,10 @@ EVENT_COUNTER_FIELDS = {
 # ── Sync worker interval (seconds) ─────────────────────────────────────────
 SYNC_INTERVAL_SECONDS = 600  # 10 minutes
 
-# Master kill-switch for the periodic Discord→Notion reconciliation. Kept False
-# through the restructure so it never auto-reconciles legacy roles mid-migration.
-SYNC_ENABLED = False
+# Master kill-switch for the periodic Discord→Notion reconciliation. Re-enabled
+# post-restructure: it's the backstop that catches nickname drift, rank/detachment
+# drift, and abandoned members that the live listener can miss.
+SYNC_ENABLED = True
 
 # Live Discord-authority sync: when a member's rank/detachment roles change in
 # Discord, upsert their Notion entry immediately (on_member_update). This is the

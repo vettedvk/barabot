@@ -291,7 +291,7 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
     Never DMs — bulk role changes shouldn't spam members; missing fields are
     chased once a week by the Saturday sweep. Returns a small summary dict.
     """
-    summary = {"created": 0, "rank_updated": 0, "archived": 0, "errors": 0}
+    summary = {"created": 0, "rank_updated": 0, "archived": 0, "lorename_updated": 0, "errors": 0}
     uid = str(member.id)
 
     desired = derive_detachment_rows(member, guild)
@@ -322,6 +322,18 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
         enlisted = None
 
     try:
+        # 0) Lorename check — the server nickname (minus any "{rank}, " prefix)
+        #    is authoritative. Push it to EVERY row so no entry keeps a stale
+        #    name. Members with no nickname are skipped so a bare Discord
+        #    username never overwrites a real lore name.
+        derived_lore = lorename_from_nick(member.nick) if member.nick else ""
+        if derived_lore and derived_lore != identity["lorename"]:
+            for row_page, _rs in rows:
+                await ns.update_roster_identity(row_page["id"], lorename=derived_lore)
+                await asyncio.sleep(0.34)
+            identity = dict(identity, lorename=derived_lore)
+            summary["lorename_updated"] += 1
+
         # 1) Archive rows for detachments the member no longer belongs to.
         for det, plist in existing_by_det.items():
             if det and det not in desired_by_det:
@@ -362,7 +374,8 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
             summary["created"] += 1
             await asyncio.sleep(0.34)
 
-        if summary["created"] or summary["rank_updated"] or summary["archived"]:
+        if (summary["created"] or summary["rank_updated"] or summary["archived"]
+                or summary["lorename_updated"]):
             await audit_log.log_event(
                 bot, title="⚙️ Roster synced from Discord (live)", color=discord.Color.teal(),
                 fields=[
@@ -371,7 +384,7 @@ async def reconcile_member(guild: discord.Guild, bot: discord.Client,
                      (", ".join(f"{d} / {r or 'manual rank'}" for d, r in desired))[:1024], False),
                     ("Changes",
                      f"created {summary['created']}, rank {summary['rank_updated']}, "
-                     f"archived {summary['archived']}", True),
+                     f"archived {summary['archived']}, lorename {summary['lorename_updated']}", True),
                 ],
             )
     except Exception as exc:
