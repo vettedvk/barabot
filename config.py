@@ -149,6 +149,7 @@ RANK_ROLE_IDS = {
 
     # Military command (senior, appointed) — lowest → highest
     "Commandant":     1540424892506447992,
+    "Quartermaster":  1548741116730278059,
     "Master at Arms": 1544121848252342353,
     "Lord Commander": 1488659968054792390,
 

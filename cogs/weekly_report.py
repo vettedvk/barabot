@@ -36,7 +36,7 @@ RANK_ORDER = [
     "Clerk", "Emissary", "Handmaiden", "Cupbearer",
     "Corporal", "SGT at Arms", "Knight Banneret", "Lieutenant", "Captain",
     "Secretary of the Court", "Steward", "Castellan", "Chancellor",
-    "Commandant", "Master at Arms", "Marshal", "Lord Commander",
+    "Commandant", "Quartermaster", "Master at Arms", "Marshal", "Lord Commander",
     "Council of Storm's End", "Blood of the Storms",
     "Heir of Storm's End", "Lady of Storm's End", "Lord of Storm's End",
 ]
