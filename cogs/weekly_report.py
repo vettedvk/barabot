@@ -33,10 +33,10 @@ log = logging.getLogger(__name__)
 RANK_ORDER = [
     "Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms",
     "Squire", "Guardsman", "Knight",
-    "Corporal", "SGT at Arms", "Knight Banneret", "Lieutenant", "Captain",
-    "Commander", "Marshal", "Stormguard Lord Commander",
     "Clerk", "Emissary", "Handmaiden", "Cupbearer",
-    "Secretary of the Court", "Quartermaster", "Chancellor",
+    "Corporal", "SGT at Arms", "Knight Banneret", "Lieutenant", "Captain",
+    "Secretary of the Court", "Steward", "Castellan", "Chancellor",
+    "Commandant", "Master at Arms", "Marshal", "Lord Commander",
     "Council of Storm's End", "Blood of the Storms",
     "Heir of Storm's End", "Lady of Storm's End", "Lord of Storm's End",
 ]

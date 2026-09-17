@@ -126,7 +126,7 @@ def _host_roles(guild: discord.Guild, key: str) -> list[discord.Role]:
 def _access_roles(guild: discord.Guild, key: str) -> list[discord.Role]:
     """Everyone allowed into the ticket: hosts + Lord Commander + High Command + Bot Admin."""
     ids = {r.id for r in _host_roles(guild, key)}
-    ids.add(config.RANK_ROLE_IDS["Stormguard Lord Commander"])
+    ids.add(config.RANK_ROLE_IDS["Lord Commander"])
     ids |= set(config.HIGH_COMMAND_ROLE_IDS.values())
     ids.add(config.ROLE_BOT_ADMIN)
     return [role for rid in ids if (role := guild.get_role(rid))]
