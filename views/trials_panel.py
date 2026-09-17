@@ -29,7 +29,6 @@ import discord
 
 import audit_log
 import config
-import notion_service as ns
 import util
 
 log = logging.getLogger(__name__)
@@ -198,19 +197,6 @@ async def handle_trial_request(interaction: discord.Interaction, key: str) -> No
 
     await interaction.response.defer(ephemeral=True)
 
-    # Roblox username + roster positions from Notion (best-effort).
-    roblox = ""
-    positions: list[str] = []
-    try:
-        pages = await ns.get_members_by_discord_id(str(member.id))
-        for page in pages:
-            stats = ns.extract_member_stats(page["properties"])
-            roblox = roblox or stats["roblox_username"]
-            if stats["detachment"]:
-                positions.append(f"{stats['detachment']} / {stats['rank'] or '—'}")
-    except Exception as exc:
-        log.warning("trials: Notion lookup failed for %s: %s", member, exc)
-
     # Create the private ticket channel in the panel's category.
     hosts = _host_roles(guild, key)
     overwrites: dict = {
@@ -255,10 +241,8 @@ async def handle_trial_request(interaction: discord.Interaction, key: str) -> No
         timestamp=discord.utils.utcnow(),
     )
     embed.add_field(name="Requester", value=f"{member.mention} (`{member.id}`)", inline=False)
-    embed.add_field(name="Roblox Username", value=roblox or "*(not on file)*", inline=True)
     if retinue:
         embed.add_field(name="Retinue", value=retinue, inline=True)
-    embed.add_field(name="Current Standing", value="\n".join(positions) or "—", inline=False)
     embed.add_field(name="Requirements", value=t["requirements"], inline=False)
     embed.add_field(name="Head-count (advisory)", value=_station_count(guild, key, retinue), inline=True)
     embed.set_footer(text="Hosts: arrange the assessment here, then close the ticket.")

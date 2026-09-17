@@ -56,25 +56,10 @@ def is_reviewer(user: discord.abc.User) -> bool:
 
 def is_officer(member: discord.Member) -> bool:
     """
-    Military Command access roles (or full admin) — gates the everyday roster /
-    military commands and /event. An explicit role set, so the display
-    hierarchy never constrains permissions.
+    Military Command access roles (or full admin) — the everyday military tier.
+    An explicit role set, so the display hierarchy never constrains permissions.
     """
     return is_admin(member) or has_any_role(member, config.OFFICER_ROLE_IDS)
-
-
-def is_event_logger(member: discord.Member) -> bool:
-    """The Court (or full admin) — gates /log_event."""
-    return is_admin(member) or has_any_role(member, config.LOGGER_ROLE_IDS)
-
-
-def is_loa_reviewer(member: discord.Member) -> bool:
-    """
-    Who may approve/deny LOA requests: Bot Admins, Military Command officers, and
-    the Court. is_officer and is_event_logger each already layer ADMIN on, so
-    their union covers all three tiers.
-    """
-    return is_officer(member) or is_event_logger(member)
 
 
 # ── 2. Review-embed parsing ───────────────────────────────────────────────────

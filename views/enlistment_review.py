@@ -12,13 +12,12 @@ import discord
 
 import audit_log
 import config
-import notion_service as ns
 import role_service
 import util
 
 
 class EnlistmentReviewView(discord.ui.View):
-    """Approve/deny a military enlistment; on approval create/reactivate the roster row."""
+    """Approve/deny a military enlistment; on approval grant the Discord roles."""
 
     def __init__(self):
         super().__init__(timeout=None)  # persistent
@@ -49,21 +48,7 @@ class EnlistmentReviewView(discord.ui.View):
         company  = "Court" if is_court else ""
         rank     = "Clerk" if is_court else "Levy"
 
-        discord_user_id = str(applicant_id)
         member = interaction.guild.get_member(applicant_id)
-        discord_username = str(member) if member else discord_user_id
-
-        existing = await ns.get_member_by_discord_id(discord_user_id)
-        if existing:
-            if ns.extract_member_stats(existing["properties"])["status"] != "Active":
-                await ns.reactivate_member(existing["id"], discord_username,
-                                           detachment=company, rank=rank, region=region)
-        else:
-            await ns.create_member(
-                roblox_username=roblox_name, roblox_id=str(roblox_id), lorename=lorename,
-                discord_username=discord_username, discord_user_id=discord_user_id,
-                detachment=company, rank=rank, region=region,
-            )
 
         if member:
             await role_service.apply_rank_and_company(member, company, rank, lorename=lorename)
@@ -148,20 +133,7 @@ class EnvoyReviewView(discord.ui.View):
 
         embed = interaction.message.embeds[0]
         applicant_id = util.id_in_field(embed, "Applicant")
-        raw_house = util.embed_field(embed, "House / Allegiance") or ""
-        roblox_name = util.embed_field(embed, "Roblox Username") or ""
-        house_display, house_key = ns.normalize_house(raw_house)
-
-        # Authoritative cap re-check at approval time (other envoys may have been
-        # added since this application was submitted). Exempt houses skip it.
-        if house_key and house_key not in config.ENVOY_EXEMPT_HOUSES:
-            counts = await ns.count_active_envoys_by_house()
-            if counts.get(house_key, 0) >= config.ENVOY_CAP:
-                await interaction.followup.send(
-                    f"❌ Can't approve — **{house_display}** is already at the "
-                    f"{config.ENVOY_CAP}-envoy cap. Decline this one or remove an existing envoy first.",
-                    ephemeral=True)
-                return
+        house_display = util.embed_field(embed, "House / Allegiance") or "—"
 
         member = interaction.guild.get_member(applicant_id) if applicant_id else None
         if member:
@@ -178,21 +150,6 @@ class EnvoyReviewView(discord.ui.View):
                     )
             await util.grant_role(member, config.ROLE_VERIFIED, "Enlisted in House Baratheon")
             await util.remove_role(member, config.ROLE_UNVERIFIED, "Enlisted — removing join role")
-
-        # Record the envoy in the Notion Envoys DB (the per-house counts log).
-        try:
-            await ns.create_envoy(
-                envoy_name=(member.display_name if member else str(applicant_id)),
-                house_display=house_display,
-                discord_user_id=str(applicant_id),
-                discord_username=(str(member) if member else str(applicant_id)),
-                roblox_username=roblox_name,
-                purpose=util.embed_field(embed, "Purpose") or "",
-            )
-        except Exception:
-            await interaction.followup.send(
-                "⚠️ Envoy role granted, but I couldn't write the Envoys DB (check NOTION_ENVOY_DB_ID "
-                "is set and shared with the bot).", ephemeral=True)
 
         if member:
             try:

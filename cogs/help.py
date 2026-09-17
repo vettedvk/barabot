@@ -1,10 +1,9 @@
 """
 Help cog — /help shows a permission-aware command reference.
 
-Everyone sees member commands. Each higher tier additionally sees its own
-section: Officers (Military Command) see the roster/military commands, the Court
-sees logging, full admins see the admin commands, and the rulers (Heir/Lady/Lord
-of Storm's End) additionally see the destructive commands.
+Everyone sees the member panels. Admins additionally see the panel-setup
+commands; the rulers (Heir/Lady/Lord of Storm's End) see the server-wide role
+tools.
 """
 
 import discord
@@ -17,66 +16,28 @@ import util
 
 # (command, description) grouped by required permission tier
 MEMBER_COMMANDS = [
-    ("Enlistment panel", "Press **Begin Enlistment**, pick your region, and fill in the form (Lore Name, Roblox details, past experience, House Words). Approved recruits join as a Levy and are placed into a retinue after their Basic Levy Training."),
-    ("Envoy panel", "Representing another house/allegiance? Press **Envoy Application** and name a real GoT house or allegiance (reviewed; capped at 3 envoys per house)."),
+    ("Enlistment panel", "Press **Begin Enlistment**, pick your region, and fill in the form (Lore Name, Roblox details, past experience, House Words). Approved recruits join as a Levy."),
+    ("Envoy panel", "Representing another house/allegiance? Press **Envoy Application** and name a real GoT house or allegiance (reviewed)."),
     ("Court panel", "Press **Court Application** to confirm your identity and sit the written test (reviewed; approved applicants join the Court as a Clerk)."),
-    ("Region panel", "Press **Set My Region** to tag yourself EU or NA (your retinue is assigned after your Basic Levy Training)."),
-    ("Discharge panel", "Press **Request Discharge** on the discharge panel to submit a discharge request (reviewed)."),
-    ("LOA panel", "Press **Request LOA** on the leave-of-absence panel to request time off — your rank/post are kept while on leave (reviewed)."),
-    ("/roster [member]", "View a roster record. Defaults to yourself."),
-    ("/myprogress", "See how close you are to your next rank (event points earned toward the 5 needed)."),
-    ("/help", "Show this command list."),
+    ("Region panel", "Press **Set My Region** to tag yourself EU or NA."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
+    ("/help", "Show this command list."),
 ]
 
-# Officer tier — Military Command access roles (and above).
-OFFICER_COMMANDS = [
-    ("/event [detachment] [title]", "Announce an event — DMs everyone in that retinue, or House-wide in one go."),
-    ("/force_enlist [member] [fleet] [as_envoy] …", "Manually enlist a member — military (retinue/Levy) or, with as_envoy, as a diplomatic Envoy."),
-    ("/force_discharge [member]", "Manually discharge an enlisted member or envoy (archives all Notion rows, strips roles, grants Visitor)."),
-    ("/envoys", "Show active envoy counts per house (the diplomatic log)."),
-    ("/remove_envoy [member]", "Remove an envoy — archive their Envoys-DB record (freeing a house slot) and strip the Envoy role."),
-    ("/remove_roster_entry [member] [detachment]", "Remove (archive) a member's roster entry for a detachment, or all entries if no detachment given. Notion only."),
-    ("/sync", "Full manual reconcile of Discord roles into Notion (detachments, ranks, abandoned posts). Role changes already sync automatically — this is the catch-up pass."),
-    ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
-    ("/strike [member] [reason]", "Issue a disciplinary strike (3 active → demote a rank, 5 → removal; strikes expire after 7 days)."),
-    ("/strikes [member]", "View a member's active strikes."),
-    ("/clear_strike [member]", "Clear a member's active strikes."),
-]
-
-# Logging tier — the Court.
-LOGGER_COMMANDS = [
-    ("/log_event [event_type] [attendees] [host] [co_host] [supervisor]", "Log an event after it happens — paste the attendees; each earns event points (1 normal / 2 PR / 3 PD) and promotes every 5 points. Basic Levy Training opens the placement prompt instead."),
-    ("/end_loa [member]", "End a member's approved LOA — restore their roster rows to Active and remove the LOA role."),
-]
-
-# Full-admin tier — every non-destructive command.
+# Full-admin tier — panel setup + reporting.
 ADMIN_COMMANDS = [
-    ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant; requests open private ticket channels)."),
-    ("/setup_region_panel", "Post the persistent 'Set My Region' retinue-sorting panel in the current channel."),
-    ("/self_update", "Post the 'Update Roblox Info' self-service panel (members fill in their own Roblox ID/username; auto-saved, no review)."),
     ("/setup_enlist_panel", "Post the military enlistment panel in its channel."),
     ("/setup_envoy_panel", "Post the Envoy (diplomatic entry) panel in the current channel."),
     ("/setup_court_panel", "Post the Court of Storm's End application panel in the current channel."),
-    ("/setup_discharge_panel", "Post the persistent Discharge Request panel in its channel."),
-    ("/setup_loa_panel", "Post the persistent LOA (Leave of Absence) request panel in its channel."),
-    ("/missingnotionrole", "List military members who are not in the Notion roster."),
-    ("Accept / Decline buttons", "Approve or deny enlistment, discharge, and LOA requests."),
+    ("/setup_region_panel", "Post the persistent 'Set My Region' panel in the current channel."),
+    ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant)."),
+    ("/weekly_report", "Post the weekly digest now — enlistments and promotions over the last 7 days."),
+    ("Accept / Decline buttons", "Approve or deny enlistment, envoy, and court applications."),
 ]
 
-# Ruler tier — Heir / Lady / Lord of Storm's End only. Destructive/irreversible.
+# Ruler tier — Heir / Lady / Lord of Storm's End.
 RULER_COMMANDS = [
-    ("/purge [message_id] [channel]", "Discharge single-entry members who joined before, and didn't react to, a message. Knights/Guardsmen are flagged, not auto-discharged; the full list is DMed to you."),
-    ("/clear_roster", "DANGER: archive every row in the Notion roster (for a clean re-import). Asks for confirmation."),
-    ("/import_roster [dry_run]", "Bulk-import members from their Discord roles into Notion, seeding rank-appropriate points (preview first)."),
-    ("/migrate_roster [dry_run]", "Match roster lorenames to the tracking DB and backfill Roblox IDs/usernames (preview first)."),
     ("/cleanup_roles [dry_run]", "Enforce separators, station & Court rules across the whole server; reports retinue conflicts. Preview first."),
-    ("/rebuild_roster [dry_run]", "Import everyone from Discord into the roster (rank/detachment/region from their roles) and backfill Roblox username/ID from the previous roster. Preview first."),
-    ("/apply_roster_roles [member] [dry_run]", "Sync Discord roles from the roster — strip legacy roles and apply each member's rank/detachment. Preview first."),
-    ("/toggle_sync", "Turn the periodic Discord→Notion sync on/off at runtime."),
-    ("/run_profile_sweep [dry_run]", "Run the weekly missing-field sweep now — DM members with blank roster fields; unreachable/blank-ID rows are reported to the house lead. Preview first."),
-    ("/roster_cache [action]", "Inspect, refresh, or toggle the in-memory roster cache (status / refresh / on / off)."),
-    ("/undo_role_changes [hours] [dry_run]", "Reverse the bot's own role changes over the last N hours (incident recovery; preview first)."),
 ]
 
 
@@ -88,10 +49,8 @@ class HelpCog(commands.Cog):
     @app_commands.guilds(discord.Object(id=config.GUILD_ID))
     async def help_command(self, interaction: discord.Interaction):
         user = interaction.user
-        is_ruler   = util.is_ruler(user)
-        is_admin   = util.is_admin(user)          # full-admin tier (includes rulers)
-        is_officer = util.is_officer(user)        # Military Command + admin
-        is_logger  = util.is_event_logger(user)   # Court + admin
+        is_ruler = util.is_ruler(user)
+        is_admin = util.is_admin(user)
 
         embed = discord.Embed(
             title="⚡ House Baratheon — Command Guide",
@@ -100,8 +59,6 @@ class HelpCog(commands.Cog):
         )
 
         def add_section(title: str, items):
-            # Discord caps each field value at 1024 chars, so split long
-            # sections across multiple fields (continuation gets a "(cont.)").
             lines = [f"**{cmd}** — {desc}" for cmd, desc in items]
             chunks: list[str] = []
             current = ""
@@ -113,7 +70,6 @@ class HelpCog(commands.Cog):
                     current = f"{current}\n{line}" if current else line
             if current:
                 chunks.append(current)
-
             for i, chunk in enumerate(chunks):
                 embed.add_field(
                     name=title if i == 0 else f"{title} (cont.)",
@@ -123,20 +79,14 @@ class HelpCog(commands.Cog):
 
         add_section("📜 Member Commands", MEMBER_COMMANDS)
 
-        if is_officer:
-            add_section("⚔️ Officer Commands", OFFICER_COMMANDS)
-
-        if is_logger:
-            add_section("📋 Court — Logging", LOGGER_COMMANDS)
-
         if is_admin:
             add_section("🛡️ Admin Commands", ADMIN_COMMANDS)
 
         if is_ruler:
-            add_section("👑 Ruler Commands (destructive)", RULER_COMMANDS)
+            add_section("👑 Ruler Commands", RULER_COMMANDS)
 
-        if not is_officer and not is_logger and not is_admin:
-            embed.set_footer(text="Some commands are restricted to Command, the Court, and House leadership.")
+        if not is_admin:
+            embed.set_footer(text="Some commands are restricted to House leadership.")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

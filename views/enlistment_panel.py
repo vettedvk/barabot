@@ -16,7 +16,6 @@ import re
 import discord
 
 import config
-import notion_service as ns
 from roblox import validate_roblox_user, RobloxValidationError
 from views.enlistment_review import EnlistmentReviewView
 
@@ -64,12 +63,6 @@ class EnlistModal(discord.ui.Modal, title="House Baratheon — Enlistment"):
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        existing = await ns.get_member_by_discord_id(str(interaction.user.id))
-        if existing and ns.extract_member_stats(existing["properties"])["status"] == "Active":
-            await interaction.followup.send(
-                "❌ You're already enlisted! Contact an officer if this is an error.",
-                ephemeral=True)
-            return
         if not _words_match(self.house_words.value):
             await interaction.followup.send(
                 "❌ Those aren't the House words. Re-read them and try again.", ephemeral=True)

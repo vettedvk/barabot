@@ -10,7 +10,6 @@ EnlistmentReviewView via the embed's Type=Court field).
 import discord
 
 import config
-import notion_service as ns
 from roblox import fetch_roblox_by_id, RobloxValidationError
 from views.enlistment_review import EnlistmentReviewView
 
@@ -35,12 +34,6 @@ class CourtIdentityModal(discord.ui.Modal, title="House Baratheon — Court Appl
 
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        existing = await ns.get_member_by_discord_id(str(interaction.user.id))
-        if existing and ns.extract_member_stats(existing["properties"])["status"] == "Active":
-            await interaction.followup.send(
-                "❌ You're already in the roster! Contact an officer if this is an error.",
-                ephemeral=True)
-            return
         gender = _norm_gender(self.gender.value)
         if gender is None:
             await interaction.followup.send(
