@@ -48,31 +48,15 @@ HIGHBORN_ROLE_IDS = {
 }
 
 # ── Known channel IDs ──────────────────────────────────────────────────────
-CHANNEL_POINTS_REVIEW    = 1499773406982439003
-CHANNEL_ABANDONMENT_LOG  = 1499797990859079892
 # Audit log: every slash command run + every automated bot action is posted here.
 CHANNEL_COMMAND_LOG      = 1488659976791527426
-CHANNEL_DISCHARGE_REVIEW = 1512498089653436426
-# Channel where the persistent "Request Discharge" button panel is posted.
-CHANNEL_DISCHARGE_PANEL  = 1512684353828683786
 
-# LOA (Leave of Absence) — mirrors discharge: members press a button in the
-# request channel, the review embed posts to the approval channel.
-CHANNEL_LOA_PANEL  = 1536688129220681830  # where the "Request LOA" button panel lives
-CHANNEL_LOA_REVIEW = 1536688227589685320  # where LOA requests post for approval
-
-# Promotions — the bot congratulates + pings a member here whenever they climb
-# the auto ladder (Levy → … → Man-at-Arms). Doubles as a promotion log.
+# Promotions — the bot posts here when a member is promoted (a higher rank role
+# is added by hand). Doubles as the promotion log the weekly report reads.
 CHANNEL_PROMOTIONS = 1537381403782811748
 
-# ── Weekly reports (inactivity, digest, leaderboard) ───────────────────────
-HOUSE_LEAD_DM_ID = 897916113499877398   # DM'd the weekly inactivity report + digest
-INACTIVITY_DAYS  = 14                    # no logged attendance in this many days = inactive
-
-# ── Strikes ────────────────────────────────────────────────────────────────
-STRIKE_EXPIRY_DAYS = 7
-STRIKE_DEMOTE      = 3
-STRIKE_REMOVE      = 5
+# ── Weekly report ──────────────────────────────────────────────────────────
+HOUSE_LEAD_DM_ID = 897916113499877398   # DM'd the weekly digest
 
 # Enlistment / Diplomatic application panel + review
 CHANNEL_ENLISTMENT_PANEL  = 1499769147033260184   # where the buttons message lives
@@ -107,11 +91,12 @@ REGION_CHOICES = ["EU", "NA"]
 # Military-command ACCESS roles (one per retinue) — distributed BY HAND; they
 # alone trigger the Military Command separator. Hygiene never grants/removes them.
 DETACHMENT_COMMAND_ROLE_IDS = {
-    "Stormbreakers":        1515481526895378504,
-    "Thunderhooves":        1540429088408215574,
-    "The Black Stags":      1515481460688289862,
-    "Stormguard":           1488659967941808131,
-    "Knights of the Storm": 1488659967941808130,
+    "Stormbreakers":         1515481526895378504,
+    "Riders of the Tempest": 1540429088408215574,   # formerly Thunderhooves
+    "Scorched Stag":         1549163958647136376,    # "SS | Command" — confirm mapping
+    "The Black Stags":       1515481460688289862,
+    "Stormguard":            1488659967941808131,
+    "Knights of the Storm":  1488659967941808130,
 }
 MILITARY_COMMAND_ROLE_IDS = set(DETACHMENT_COMMAND_ROLE_IDS.values())
 
@@ -122,12 +107,13 @@ ENLISTMENT_BANNER_URL = "https://i.ibb.co/Wvg22HKX/Banner.png"
 # Main combat retinues use the points ladder. Specialised retinues + Court are
 # appointment-based. High Command has no single retinue role.
 COMPANY_ROLE_IDS = {
-    "Stormbreakers":        1515430181135716432,   # close combat (main)
-    "Thunderhooves":        1540426846703976468,   # cavalry, incl. archers for now (main)
-    "The Black Stags":      1515430116501753948,   # elite retinue (SG prospects)
-    "Stormguard":           1522250233306681434,
-    "Knights of the Storm": 1488659968067371083,   # "Storm Knights" in Discord
-    "Court":                1525947287803662521,   # == ROLE_COURT
+    "Stormbreakers":         1515430181135716432,   # close combat (main)
+    "Riders of the Tempest": 1540426846703976468,   # cavalry (formerly Thunderhooves, main)
+    "Scorched Stag":         1549164006743220314,
+    "The Black Stags":       1515430116501753948,    # elite retinue (SG prospects)
+    "Stormguard":            1522250233306681434,
+    "Knights of the Storm":  1488659968067371083,    # "Storm Knights" in Discord
+    "Court":                 1525947287803662521,    # == ROLE_COURT
 }
 
 # Defunct roles from the old region-based structure — stripped by
@@ -141,10 +127,8 @@ LEGACY_ROLE_IDS = {
     1488659968067371085,  # old Thunderhooves separator
 }
 
-# Main combat detachments (the auto points-ladder ones).
-MAIN_COMBAT_DETACHMENTS = ["Stormbreakers", "Thunderhooves"]
-# Retinues a Levy can be placed into after Basic Levy Training (active mains).
-PLACEMENT_DETACHMENTS = ["Stormbreakers", "Thunderhooves"]
+# Main combat detachments — used by role hygiene to flag retinue conflicts.
+MAIN_COMBAT_DETACHMENTS = ["Stormbreakers", "Riders of the Tempest"]
 
 # ── Rank role IDs ──────────────────────────────────────────────────────────
 RANK_ROLE_IDS = {
@@ -155,20 +139,24 @@ RANK_ROLE_IDS = {
     "Veteran Footman": 1488659968033951871,
     "Man-at-Arms":     1488659967979290804,
 
-    # Military stations / command (appointed, house-wide) — lowest → highest
+    # Military stations (appointed, house-wide) — lowest → highest
     "Corporal":       1488659967979290805,
     "SGT at Arms":    1540425172513726464,
     "Knight Banneret": 1540424980465189006,
     "Lieutenant":     1488659968067371086,
     "Captain":        1488659968096862329,
-    "Commander":      1540424892506447992,
     "Marshal":        1530245399003267124,
+
+    # Military command (senior, appointed) — lowest → highest
+    "Commandant":     1540424892506447992,
+    "Quartermaster":  1548741116730278059,
+    "Master at Arms": 1544121848252342353,
+    "Lord Commander": 1488659968054792390,
 
     # Specialised retinue ranks (appointed)
     "Squire":                    1522250075756171355,
     "Guardsman":                 1488659968067371084,
     "Knight":                    1488659968054792385,
-    "Stormguard Lord Commander": 1488659968054792390,
 
     # Court ranks (appointed) — lowest → highest
     "Clerk":                  1488659968054792383,
@@ -176,7 +164,8 @@ RANK_ROLE_IDS = {
     "Handmaiden":             1540425645656506468,
     "Cupbearer":              1526653118526394389,
     "Secretary of the Court": 1540424099644309594,
-    "Quartermaster":          1540425552631173232,
+    "Steward":                1544120651256954890,
+    "Castellan":              1540425552631173232,
     "Chancellor":             1540425482825244802,
 
     # High Command
@@ -194,18 +183,19 @@ RANK_ROLE_IDS = {
 _MAIN_COMBAT_RANKS = [
     "Levy", "Soldier", "Footman", "Veteran Footman", "Man-at-Arms",
     "Corporal", "SGT at Arms", "Knight Banneret", "Lieutenant", "Captain",
-    "Commander", "Marshal",
+    "Marshal",
 ]
 DETACHMENT_RANKS = {
-    "Stormbreakers":        list(_MAIN_COMBAT_RANKS),
-    "Thunderhooves":        list(_MAIN_COMBAT_RANKS),
-    "The Black Stags":      ["Knight Banneret", "Lieutenant", "Captain"],
-    "Stormguard":           ["Squire", "Guardsman", "Lieutenant", "Stormguard Lord Commander"],
-    "Knights of the Storm": ["Squire", "Knight", "Captain"],
-    "Court":                ["Clerk", "Emissary", "Handmaiden", "Cupbearer",
-                             "Secretary of the Court", "Quartermaster", "Chancellor"],
-    "High Command":         ["Council of Storm's End", "Blood of the Storms",
-                             "Heir of Storm's End", "Lady of Storm's End", "Lord of Storm's End"],
+    "Stormbreakers":         list(_MAIN_COMBAT_RANKS),
+    "Riders of the Tempest": list(_MAIN_COMBAT_RANKS),
+    "Scorched Stag":         list(_MAIN_COMBAT_RANKS),
+    "The Black Stags":       ["Knight Banneret", "Lieutenant", "Captain"],
+    "Stormguard":            ["Squire", "Guardsman", "Lieutenant", "Lord Commander"],
+    "Knights of the Storm":  ["Squire", "Knight", "Captain"],
+    "Court":                 ["Clerk", "Emissary", "Handmaiden", "Cupbearer",
+                              "Secretary of the Court", "Steward", "Castellan", "Chancellor"],
+    "High Command":          ["Council of Storm's End", "Blood of the Storms",
+                              "Heir of Storm's End", "Lady of Storm's End", "Lord of Storm's End"],
 }
 
 # Alias kept for role_service, which strips a detachment's rank roles on a swap.
@@ -217,17 +207,12 @@ FLEET_RANK_ROLE_IDS = {RANK_ROLE_IDS[r] for r in FLEET_RANKS}
 
 # Military station ranks: holders need no ladder rank (role hygiene strips it).
 MILITARY_STATION_RANKS = ["Corporal", "SGT at Arms", "Knight Banneret",
-                          "Lieutenant", "Captain", "Commander", "Marshal"]
+                          "Lieutenant", "Captain", "Marshal"]
 # Court ranks.
 COURT_STATION_RANKS = ["Clerk", "Emissary", "Handmaiden", "Cupbearer",
-                       "Secretary of the Court", "Quartermaster", "Chancellor"]
+                       "Secretary of the Court", "Steward", "Castellan", "Chancellor"]
 STATION_ROLE_IDS       = {RANK_ROLE_IDS[r] for r in MILITARY_STATION_RANKS}
 COURT_STATION_ROLE_IDS = {RANK_ROLE_IDS[r] for r in COURT_STATION_RANKS}
-
-# DUAL court ranks — held ALONGSIDE a military posting (member keeps their
-# retinue row). The rest are court-only. Assumption pending confirmation.
-COURT_DUAL_RANKS      = {"Clerk", "Cupbearer", "Handmaiden", "Secretary of the Court"}
-COURT_EXCLUSIVE_RANKS = {"Emissary", "Quartermaster", "Chancellor"}
 
 # ── Court written test ─────────────────────────────────────────────────────
 # Max 5 questions (Discord modal limit). Each is (short_label, full_question):
@@ -248,44 +233,21 @@ COURT_TEST_QUESTIONS = [
      "administration for other groups/genres?"),
 ]
 
-# ── Envoys (diplomatic entry) ──────────────────────────────────────────────
-# Each envoy represents another house/allegiance. At most ENVOY_CAP active
-# envoys per house, EXCEPT the houses in ENVOY_EXEMPT_HOUSES (unlimited). Every
-# envoy is tracked in the Notion Envoys DB (env NOTION_ENVOY_DB_ID). House names
-# are matched case-insensitively with any leading "House " stripped, so "House
-# Stark", "stark" and "Stark" are the same house.
-ENVOY_CAP = 3
-ENVOY_EXEMPT_HOUSES = {"arryn"}  # normalized keys (lowercase, no "House " prefix)
-
-# Officer/manual ranks: never auto-promoted, protected from /purge auto-discharge.
-OFFICER_RANKS = (
-    set(MILITARY_STATION_RANKS)
-    | set(COURT_STATION_RANKS)
-    | {"Stormguard Lord Commander"}
-)
-
-# Purge: protected from auto-discharge but explicitly flagged for a manual decision.
-PURGE_FLAG_RANKS = {"Knight", "Guardsman", "Squire"}
-
-# /event hosts: stations + court + Lord Commander + High Command (+ Bot Admin).
+# Assessment (trials) hosts: stations + court + Lord Commander + High Command.
 EVENT_HOST_ROLE_IDS = (
     set(STATION_ROLE_IDS) | set(COURT_STATION_ROLE_IDS)
-    | {RANK_ROLE_IDS["Stormguard Lord Commander"]}
+    | {RANK_ROLE_IDS["Lord Commander"]}
     | set(HIGH_COMMAND_ROLE_IDS.values())
 )
 
-# /log_event — the Court logs attendance. Court ranks/role + High Command (+ Admin).
-EVENT_LOGGER_ROLE_IDS = (
-    set(COURT_STATION_ROLE_IDS) | {ROLE_COURT} | set(HIGH_COMMAND_ROLE_IDS.values())
-)
-
-# Command = Council of Storm's End and above (extra High Command roster row).
+# Command = Council of Storm's End and above.
 COMMAND_ROLE_IDS = set(HIGH_COMMAND_ROLE_IDS.values())
 
 # Roles permitted to Accept/Decline enlistment & envoy applications.
 ENLISTMENT_REVIEWER_ROLE_IDS = set(HIGH_COMMAND_ROLE_IDS.values()) | {
+    RANK_ROLE_IDS["Lord Commander"],
     RANK_ROLE_IDS["Marshal"],
-    RANK_ROLE_IDS["Commander"],
+    RANK_ROLE_IDS["Commandant"],
     RANK_ROLE_IDS["Captain"],
     RANK_ROLE_IDS["Lieutenant"],
     RANK_ROLE_IDS["Secretary of the Court"],
@@ -294,10 +256,9 @@ ENLISTMENT_REVIEWER_ROLE_IDS = set(HIGH_COMMAND_ROLE_IDS.values()) | {
 }
 
 # ── Command permission tiers ────────────────────────────────────────────────
-#   RULER   — destructive / irreversible (bulk wipes, migrations, mass role pass).
-#   ADMIN   — every non-destructive command.
-#   OFFICER — everyday roster / military commands (the retinue command roles).
-#   LOGGER  — /log_event (the Court).
+#   RULER   — server-wide role tools (/cleanup_roles).
+#   ADMIN   — panel setup + the weekly report.
+#   OFFICER — the retinue command access roles.
 RULER_ROLE_IDS = {
     HIGH_COMMAND_ROLE_IDS["Heir of Storm's End"],
     HIGH_COMMAND_ROLE_IDS["Lady of Storm's End"],
@@ -312,12 +273,6 @@ ADMIN_ROLE_IDS = {
 
 # Officer tier: the retinue command access roles. ADMIN added by util.is_officer.
 OFFICER_ROLE_IDS = set(MILITARY_COMMAND_ROLE_IDS)
-
-# Logger tier: the Court role. ADMIN added by util.is_event_logger.
-LOGGER_ROLE_IDS = {ROLE_COURT}
-
-# Roster Status value written to a member's rows while they are on leave.
-LOA_STATUS = "LOA"
 
 # ── Separator (divider) roles ──────────────────────────────────────────────
 # One separator per section of the Discord role list. Role hygiene grants each
@@ -335,7 +290,8 @@ SEPARATOR_STATUS           = 1488659967979290798
 # Upper court = the senior court ranks that live above the bot with High Command.
 UPPER_COURT_ROLE_IDS = {
     RANK_ROLE_IDS["Chancellor"],
-    RANK_ROLE_IDS["Quartermaster"],
+    RANK_ROLE_IDS["Castellan"],
+    RANK_ROLE_IDS["Steward"],
     RANK_ROLE_IDS["Secretary of the Court"],
     RANK_ROLE_IDS["Cupbearer"],
     RANK_ROLE_IDS["Handmaiden"],
@@ -373,72 +329,15 @@ SEPARATOR_TRIGGERS = {
     },
     SEPARATOR_RETINUE: {
         COMPANY_ROLE_IDS[d] for d in
-        ("Stormbreakers", "Thunderhooves", "The Black Stags",
-         "Stormguard", "Knights of the Storm")
+        ("Stormbreakers", "Riders of the Tempest", "Scorched Stag",
+         "The Black Stags", "Stormguard", "Knights of the Storm")
     },
     SEPARATOR_STATUS: set(STATUS_ROLE_IDS),
 }
 
-# ── Event types and base point values ──────────────────────────────────────
-# Per-rank points model: promotion is 5 points earned SINCE the last promotion
-# (not a cumulative career total). Each ordinary event is 1 point; PRs are worth
-# 2 and PDs 3. Basic Levy Training is worth 0 — it is a placement trigger, not a
-# scoring event (it moves a Levy into a detachment as a Soldier by hand).
-EVENT_TYPES = {
-    "Basic Levy Training": 0,
-    "House-wide Training": 1,
-    "Retinue Training":    1,
-    "Joint Event":         1,
-    "PR":                  2,
-    "PD":                  3,
-}
-
-# Points required to climb one rank on an auto ladder (Soldier → … → Man-at-Arms).
-RANK_STEP = 5
-
-# The event whose approval ticks the Basic Levy Training checkbox (and triggers
-# the post-training placement prompt).
-BASIC_LEVY_EVENT = "Basic Levy Training"
-BASIC_LEVY_FIELD = "Basic Levy Training"  # Notion checkbox column
-
-EVENT_COUNTER_FIELDS = {
-    "House-wide Training": "Combat Trainings",
-    "Retinue Training":    "Combat Trainings",
-    "Joint Event":         "Joints",
-    "PR":                  "PRs",
-}
-
-# ── Sync worker interval (seconds) ─────────────────────────────────────────
-SYNC_INTERVAL_SECONDS = 600  # 10 minutes
-
-# Master kill-switch for the periodic Discord→Notion reconciliation. Kept False
-# through the restructure so it never auto-reconciles legacy roles mid-migration.
-SYNC_ENABLED = False
-
-# Live Discord-authority sync: when a member's rank/detachment roles change in
-# Discord, upsert their Notion entry immediately (on_member_update). This is the
-# "Discord at the centre" model — independent of the periodic bulk reconcile
-# above, which stays off during the migration.
-DISCORD_AUTHORITY_SYNC = True
-
-# ── Roster hot layer (in-memory cache over Notion) ─────────────────────────
-# Notion stays the durable store; this caches per-member roster pages so repeat
-# reads don't re-hit Notion. Writes invalidate the affected member; a periodic
-# refresh reloads the whole roster so rows added/edited directly in Notion are
-# picked up. Kept safe by a short read TTL (roster_cache.TTL_SECONDS).
-ROSTER_CACHE_ENABLED = True
-ROSTER_CACHE_REFRESH_SECONDS = 180  # full refresh cadence (picks up manual Notion edits)
-
-# ── Optional: custom points emoji ──────────────────────────────────────────
-POINTS_EMOJI = None
-
-# Legacy Military Tracking DB — read-only source for the one-off /migrate_roster.
-NOTION_MILITARY_TRACKING_DB_ID = "8823df60b95383ba96b481c3b1c302e9"
-
 # ── Nicknames ──────────────────────────────────────────────────────────────
 NICKNAME_MAX = 32  # Discord limit
 NICKNAME_RANK_SHORT = {
-    "Stormguard Lord Commander": "Lord Commander",
-    "Secretary of the Court":    "Secretary",
-    "Knight Banneret":           "Banneret",
+    "Secretary of the Court": "Secretary",
+    "Knight Banneret":        "Banneret",
 }

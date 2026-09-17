@@ -42,7 +42,6 @@ from discord.ext import commands
 
 import audit_log
 import config
-import notion_service as ns
 import util
 
 log = logging.getLogger(__name__)
@@ -165,20 +164,6 @@ class RoleHygieneCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
 
-        # Notion side-check: rows still carrying a station/court rank whose
-        # Discord role the member no longer holds (sync never overwrites
-        # manual ranks, so these always need a human decision).
-        stale_map: dict[str, list[tuple[str, str]]] = {}
-        try:
-            for page in await ns.get_all_active_members():
-                stats = ns.extract_member_stats(page["properties"])
-                if stats["discord_user_id"] and stats["rank"] in config.OFFICER_RANKS:
-                    stale_map.setdefault(stats["discord_user_id"], []).append(
-                        (stats["detachment"], stats["rank"])
-                    )
-        except Exception as exc:
-            log.warning("cleanup_roles: Notion stale-rank check skipped: %s", exc)
-
         touched = errors = 0
         flagged: list[str] = []
         preview: list[str] = []
@@ -186,13 +171,6 @@ class RoleHygieneCog(commands.Cog):
         async for member in guild.fetch_members(limit=None):
             try:
                 add, remove, notes = compute_changes(member)
-                ids = {r.id for r in member.roles}
-                for det, rank in stale_map.get(str(member.id), []):
-                    rid = config.RANK_ROLE_IDS.get(rank)
-                    if rid and rid not in ids:
-                        notes = notes + [
-                            f"Notion {det or '—'} row says {rank} but they don't hold that role"
-                        ]
                 for note in notes:
                     flagged.append(f"{member} (`{member.id}`) — {note}")
                 if not add and not remove:

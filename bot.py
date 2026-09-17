@@ -13,12 +13,6 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 import config
-from views.discharge_review import DischargeReviewView
-from views.discharge_panel import DischargePanelView
-from views.loa_review import LOAReviewView
-from views.loa_panel import LOAPanelView
-from views.self_update_panel import SelfUpdatePanelView
-from views.profile_completion_panel import ProfileCompletionView
 from views.enlistment_panel import EnlistmentPanelView
 from views.envoy_panel import EnvoyPanelView
 from views.court_panel import CourtPanelView
@@ -87,12 +81,6 @@ class BaratheonBot(commands.Bot):
         self.add_view(CourtPanelView())
         self.add_view(EnlistmentReviewView())
         self.add_view(EnvoyReviewView())
-        self.add_view(DischargeReviewView())
-        self.add_view(DischargePanelView())
-        self.add_view(LOAReviewView())
-        self.add_view(LOAPanelView())
-        self.add_view(SelfUpdatePanelView())
-        self.add_view(ProfileCompletionView())
         self.add_view(RegionPanelView())
         for trial_key in TRIALS:  # one persistent button per trial
             self.add_view(TrialRequestView(trial_key))
@@ -101,25 +89,12 @@ class BaratheonBot(commands.Bot):
         # Load cogs
         for cog in [
             "cogs.enlistment",
-            "cogs.envoys",
-            "cogs.admin",
-            "cogs.discharge",
-            "cogs.loa",
-            "cogs.recognition",
-            "cogs.reports",
-            "cogs.strikes",
             "cogs.audit",
-            "cogs.sync_worker",
             "cogs.help",
-            "cogs.events",
             "cogs.role_hygiene",
-            "cogs.discord_sync",
-            "cogs.profile_sweep",
-            "cogs.roster_cache_worker",
             "cogs.region",
-            "cogs.migration",
-            "cogs.migrate_v2",
             "cogs.trials",
+            "cogs.weekly_report",
         ]:
             await self.load_extension(cog)
             log.info("Loaded cog: %s", cog)

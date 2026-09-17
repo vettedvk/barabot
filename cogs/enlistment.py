@@ -119,8 +119,7 @@ class EnlistmentCog(commands.Cog):
             description=(
                 "Representing another house or allegiance? Press **Envoy Application** below.\n\n"
                 "Name the real Game of Thrones house or allegiance you speak for (e.g. House Stark, "
-                f"the Faith of the Seven, the Night's Watch). Each house may have at most "
-                f"**{config.ENVOY_CAP}** envoys."
+                "the Faith of the Seven, the Night's Watch)."
             ),
             color=discord.Color.teal(),
         )

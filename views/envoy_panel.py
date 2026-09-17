@@ -5,25 +5,14 @@ Envoy panel — its own entry point for diplomatic envoys of other houses.
 
 The applicant names the house or allegiance they represent (a real Game of
 Thrones house or allegiance, e.g. House Stark, the Faith of the Seven, the
-Night's Watch). Every house is capped at config.ENVOY_CAP active envoys, except
-the houses in config.ENVOY_EXEMPT_HOUSES (e.g. Arryn), which are unlimited. On
-approval the Envoy role is granted and the envoy is recorded in the Notion Envoys
-DB (see views/enlistment_review.py: EnvoyReviewView).
+Night's Watch). Reviewers decide by hand; on approval the Envoy role is granted
+(see views/enlistment_review.py: EnvoyReviewView).
 """
 
 import discord
 
 import config
-import notion_service as ns
 from views.enlistment_review import EnvoyReviewView
-
-
-async def cap_blocked(house_key: str) -> bool:
-    """True if this house is at/over its active-envoy cap (exempt houses never are)."""
-    if house_key in config.ENVOY_EXEMPT_HOUSES:
-        return False
-    counts = await ns.count_active_envoys_by_house()
-    return counts.get(house_key, 0) >= config.ENVOY_CAP
 
 
 class EnvoyModal(discord.ui.Modal, title="House Baratheon — Envoy Application"):
@@ -41,22 +30,10 @@ class EnvoyModal(discord.ui.Modal, title="House Baratheon — Envoy Application"
     async def on_submit(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
 
-        # One active envoy row per person.
-        if await ns.get_active_envoy_by_discord_id(str(interaction.user.id)):
-            await interaction.followup.send(
-                "❌ You're already registered as an envoy. Contact an officer if this is an error.",
-                ephemeral=True)
-            return
-
-        house_display, house_key = ns.normalize_house(self.house.value)
+        house_display = (self.house.value or "").strip()
         if not house_display:
             await interaction.followup.send(
                 "❌ Enter the house or allegiance you represent.", ephemeral=True)
-            return
-        if await cap_blocked(house_key):
-            await interaction.followup.send(
-                f"❌ **{house_display}** already has the maximum of **{config.ENVOY_CAP}** envoys. "
-                "Another house may still have openings.", ephemeral=True)
             return
 
         embed = discord.Embed(title="🕊️ Diplomatic Entry — Pending Review", color=discord.Color.teal())
@@ -65,8 +42,7 @@ class EnvoyModal(discord.ui.Modal, title="House Baratheon — Envoy Application"
                         value=f"{interaction.user.mention} (`{interaction.user.id}`)", inline=False)
         embed.add_field(name="Roblox Username", value=self.roblox_username.value, inline=True)
         embed.add_field(name="Purpose", value=(self.purpose.value or "—")[:1024], inline=False)
-        embed.set_footer(text=f"Approving grants the Envoy role (cap {config.ENVOY_CAP}/house, "
-                              "Arryn exempt) and records them in the Envoys DB.")
+        embed.set_footer(text="Approving grants the Envoy role.")
 
         review_channel = interaction.client.get_channel(config.CHANNEL_ENLISTMENT_REVIEW)
         if review_channel is None:

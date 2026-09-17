@@ -6,7 +6,6 @@ import time
 
 import discord
 import config
-import notion_service as ns
 
 
 # ── Loop-guard for Discord-authority sync ────────────────────────────────────
@@ -169,13 +168,6 @@ async def announce_promotion(
         return
     if ladder.index(new_rank) <= ladder.index(old_rank):
         return  # lateral move, demotion, or no change — nothing to celebrate
-
-    # Permanent record (also powers the weekly digest's promotion count).
-    try:
-        await ns.log_advancement(str(member.id), new_rank, "Promotion",
-                                 detail=f"{old_rank} → {new_rank}")
-    except Exception:
-        pass
 
     channel_id = getattr(config, "CHANNEL_PROMOTIONS", 0)
     if not channel_id:
