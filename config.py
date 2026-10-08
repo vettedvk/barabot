@@ -51,6 +51,10 @@ HIGHBORN_ROLE_IDS = {
 # Audit log: every slash command run + every automated bot action is posted here.
 CHANNEL_COMMAND_LOG      = 1488659976791527426
 
+# Discharge — the request-panel button lives in PANEL; requests post to REVIEW.
+CHANNEL_DISCHARGE_PANEL  = 1512684353828683786
+CHANNEL_DISCHARGE_REVIEW = 1512498089653436426
+
 # Promotions — the bot posts here when a member is promoted (a higher rank role
 # is added by hand). Doubles as the promotion log the weekly report reads.
 CHANNEL_PROMOTIONS = 1537381403782811748
