@@ -17,6 +17,8 @@ from views.enlistment_panel import EnlistmentPanelView
 from views.envoy_panel import EnvoyPanelView
 from views.court_panel import CourtPanelView
 from views.enlistment_review import EnlistmentReviewView, EnvoyReviewView
+from views.discharge_panel import DischargePanelView
+from views.discharge_review import DischargeReviewView
 from views.region_panel import RegionPanelView
 from views.trials_panel import TRIALS, TrialRequestView, TrialTicketCloseView
 
@@ -81,6 +83,8 @@ class BaratheonBot(commands.Bot):
         self.add_view(CourtPanelView())
         self.add_view(EnlistmentReviewView())
         self.add_view(EnvoyReviewView())
+        self.add_view(DischargePanelView())
+        self.add_view(DischargeReviewView())
         self.add_view(RegionPanelView())
         for trial_key in TRIALS:  # one persistent button per trial
             self.add_view(TrialRequestView(trial_key))
@@ -89,6 +93,7 @@ class BaratheonBot(commands.Bot):
         # Load cogs
         for cog in [
             "cogs.enlistment",
+            "cogs.discharge",
             "cogs.audit",
             "cogs.help",
             "cogs.role_hygiene",

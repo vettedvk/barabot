@@ -20,6 +20,7 @@ MEMBER_COMMANDS = [
     ("Envoy panel", "Representing another house/allegiance? Press **Envoy Application** and name a real GoT house or allegiance (reviewed)."),
     ("Court panel", "Press **Court Application** to confirm your identity and sit the written test (reviewed; approved applicants join the Court as a Clerk)."),
     ("Region panel", "Press **Set My Region** to tag yourself EU or NA."),
+    ("Discharge panel", "Press **Request Discharge** to step down from service (reviewed; approval strips your military roles and grants Visitor)."),
     ("Assessments panel", "Knights: request a Corporal or Lieutenant Assessment — a private ticket channel opens with your hosts. (Knight Trial and Stormguard tryouts are invitation-only.)"),
     ("/help", "Show this command list."),
 ]
@@ -31,8 +32,9 @@ ADMIN_COMMANDS = [
     ("/setup_court_panel", "Post the Court of Storm's End application panel in the current channel."),
     ("/setup_region_panel", "Post the persistent 'Set My Region' panel in the current channel."),
     ("/setup_trials_panel", "Post the assessment-request panels (Corporal + Lieutenant)."),
+    ("/setup_discharge_panel", "Post the persistent Discharge Request panel in its channel."),
     ("/weekly_report", "Post the weekly digest now — enlistments and promotions over the last 7 days."),
-    ("Accept / Decline buttons", "Approve or deny enlistment, envoy, and court applications."),
+    ("Accept / Decline buttons", "Approve or deny enlistment, envoy, court, and discharge requests."),
 ]
 
 # Ruler tier — Heir / Lady / Lord of Storm's End.
